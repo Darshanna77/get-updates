@@ -116,7 +116,8 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
         chat_id = msg.chat_id
         text    = msg.text.strip()
         parts   = text.split()
-        cmd     = parts[0].lower().split("@")[0]   # strip @botname suffix
+        # Normalize Telegram command name so all commands are case-insensitive.
+        cmd     = parts[0].split("@")[0].casefold()   # strip @botname suffix
 
         logger.info(f"Command from {chat_id}: {text}")
 

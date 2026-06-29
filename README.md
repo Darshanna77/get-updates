@@ -18,8 +18,12 @@ A personal Telegram bot that monitors NSE (National Stock Exchange) and BSE (Bom
 - `/remove` - Remove a company from watchlist
 - `/list` - View current watchlist
 - `/search` - Search for NSE companies
+- `/latestAnn` - Latest 5 announcements for a symbol
+- `/latestAct` - Corporate actions summary (last 10 years)
 - `/check` - Manually check for new announcements/actions
 - `/status` - View bot status
+
+All commands are case-insensitive, so `/ADD`, `/Add`, and `/add` work the same.
 
 ## Setup Instructions
 
@@ -58,7 +62,7 @@ pip install -r requirements.txt
 # Create .env file
 cat > .env << EOF
 TELEGRAM_BOT_TOKEN=your_bot_token_here
-TELEGRAM_CHAT_ID=your_chat_id_here
+TELEGRAM_CHAT_IDS=your_chat_id_here
 EOF
 
 # Run the bot
@@ -72,7 +76,7 @@ python bot.py
 3. Add secrets to GitHub:
    - Go to Settings → Secrets and variables → Actions
    - Add `TELEGRAM_BOT_TOKEN`
-   - Add `TELEGRAM_CHAT_ID`
+   - Add `TELEGRAM_CHAT_IDS` (comma-separated if multiple chat IDs)
 4. The bot will run automatically via GitHub Actions
 
 ## Project Structure
@@ -128,7 +132,7 @@ The bot uses stock symbols for company identification. Examples:
 
 ## Troubleshooting
 
-- **Bot not sending messages**: Check `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`
+- **Bot not sending messages**: Check `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_IDS`
 - **No announcements fetched**: Verify NSE website availability
 - **Duplicate alerts**: Check database records in `nse_bot.db`
 
