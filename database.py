@@ -1,0 +1,191 @@
+"""Database setup and operations for NSE Bot."""
+import sqlite3
+from contextlib import contextmanager
+from pathlib import Path
+from config import DB_PATH
+
+
+class Database:
+    """SQLite database handler for NSE Bot."""
+
+    def __init__(self, db_path: str = DB_PATH):
+        self.db_path = db_path
+        self.init_db()
+
+    @contextmanager
+    def get_connection(self):
+        """Context manager for database connections."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            yield conn
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
+    def init_db(self):
+        """Initialize database schema."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Watchlist table - stores companies to monitor
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS watchlist (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT NOT NULL,
+                    company_name TEXT NOT NULL,
+                    exchange TEXT NOT NULL,
+                    added_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(symbol, exchange)
+                )
+                """
+            )
+
+            # Processed announcements - prevents duplicate alerts
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS processed_announcements (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT NOT NULL,
+                    exchange TEXT NOT NULL,
+                    announcement_id TEXT NOT NULL,
+                    announcement_title TEXT,
+                    announcement_date TIMESTAMP,
+                    processed_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(symbol, exchange, announcement_id)
+                )
+                """
+            )
+
+            # Processed corporate actions - prevents duplicate alerts
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS processed_corporate_actions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT NOT NULL,
+                    exchange TEXT NOT NULL,
+                    action_id TEXT NOT NULL,
+                    action_type TEXT,
+                    action_title TEXT,
+                    action_date TIMESTAMP,
+                    processed_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(symbol, exchange, action_id)
+                )
+                """
+            )
+
+            cursor.close()
+            print(f"Database initialized at {self.db_path}")
+
+    def add_to_watchlist(self, symbol: str, company_name: str, exchange: str = "NSE") -> bool:
+        """Add company to watchlist."""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO watchlist (symbol, company_name, exchange)
+                    VALUES (?, ?, ?)
+                    """,
+                    (symbol.upper(), company_name, exchange.upper()),
+                )
+                cursor.close()
+                return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def remove_from_watchlist(self, symbol: str, exchange: str = "NSE") -> bool:
+        """Remove company from watchlist."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM watchlist WHERE symbol = ? AND exchange = ?",
+                (symbol.upper(), exchange.upper()),
+            )
+            cursor.close()
+            return cursor.rowcount > 0
+
+    def get_watchlist(self) -> list:
+        """Get all companies in watchlist."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT symbol, company_name, exchange FROM watchlist ORDER BY company_name")
+            results = cursor.fetchall()
+            cursor.close()
+            return [{"symbol": row[0], "name": row[1], "exchange": row[2]} for row in results]
+
+    def is_in_watchlist(self, symbol: str, exchange: str = "NSE") -> bool:
+        """Check if symbol is in watchlist."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT 1 FROM watchlist WHERE symbol = ? AND exchange = ?",
+                (symbol.upper(), exchange.upper()),
+            )
+            result = cursor.fetchone()
+            cursor.close()
+            return result is not None
+
+    def mark_announcement_processed(
+        self, symbol: str, exchange: str, announcement_id: str, title: str, date: str
+    ) -> bool:
+        """Mark announcement as processed."""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO processed_announcements
+                    (symbol, exchange, announcement_id, announcement_title, announcement_date)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (symbol.upper(), exchange.upper(), announcement_id, title, date),
+                )
+                cursor.close()
+                return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def mark_corporate_action_processed(
+        self, symbol: str, exchange: str, action_id: str, action_type: str, title: str, date: str
+    ) -> bool:
+        """Mark corporate action as processed."""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO processed_corporate_actions
+                    (symbol, exchange, action_id, action_type, action_title, action_date)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (symbol.upper(), exchange.upper(), action_id, action_type, title, date),
+                )
+                cursor.close()
+                return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def clear_old_processed_records(self, days: int = 30):
+        """Clear processed records older than specified days."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                DELETE FROM processed_announcements
+                WHERE datetime(processed_date) < datetime('now', ? || ' days')
+                """,
+                (f"-{days}",),
+            )
+            cursor.execute(
+                """
+                DELETE FROM processed_corporate_actions
+                WHERE datetime(processed_date) < datetime('now', ? || ' days')
+                """,
+                (f"-{days}",),
+            )
+            cursor.close()
