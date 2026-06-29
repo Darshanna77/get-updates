@@ -1,7 +1,8 @@
 """NSE and BSE data fetcher for corporate announcements and actions."""
 import hashlib
 import logging
-from typing import Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -36,6 +37,24 @@ BSE_SYMBOLS = {
     "MARUTI": "MARUTI SUZUKI",
 }
 
+# BSE symbol -> scrip code mapping for reliable API queries.
+# These are stable exchange identifiers, independent of website UI.
+BSE_SCRIP_CODES = {
+    "RELIANCE": "500325",
+    "TCS": "532540",
+    "HDFC": "500180",   # HDFC Bank
+    "ICICI": "532174",  # ICICI Bank
+    "INFY": "500209",
+    "LT": "500510",
+    "ITC": "500875",
+    "SBIN": "500112",
+    "MARUTI": "532500",
+    "TECHM": "532755",
+    "WIPRO": "507685",
+    "AXIS": "532215",
+    "HCL": "532281",
+}
+
 
 class StockFetcher:
     """Fetch NSE and BSE corporate announcements and actions."""
@@ -55,6 +74,27 @@ class StockFetcher:
         """Create a deterministic ID for de-duplication."""
         payload = "|".join(parts)
         return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+    def _date_key(self, value: str) -> datetime:
+        """Best-effort date parser for sorting newest first."""
+        if not value:
+            return datetime.min
+
+        value = str(value).strip()
+        fmts = [
+            "%d-%b-%Y %H:%M:%S",
+            "%d-%b-%Y",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            "%Y-%m-%dT%H:%M:%S",
+            "%d %b %Y",
+            "%Y%m%d",
+        ]
+        for fmt in fmts:
+            try:
+                return datetime.strptime(value, fmt)
+            except ValueError:
+                continue
+        return datetime.min
 
     def _prepare_nse_session(self):
         """Prime NSE cookies once before API calls."""
@@ -77,6 +117,21 @@ class StockFetcher:
                 return data["data"]
             return []
         return []
+
+    def _get_bse_json(self, endpoint: str, params: Dict[str, str]) -> Any:
+        """Fetch JSON payload from BSE API endpoint."""
+        url = f"https://api.bseindia.com/BseIndiaAPI/api/{endpoint}"
+        headers = {
+            "Referer": "https://www.bseindia.com/",
+            "Accept": "application/json, text/plain, */*",
+        }
+        resp = self.session.get(url, params=params, headers=headers, timeout=25)
+        resp.raise_for_status()
+        return resp.json()
+
+    def _get_bse_scrip_code(self, symbol: str) -> Optional[str]:
+        """Resolve BSE scrip code from symbol."""
+        return BSE_SCRIP_CODES.get(symbol.upper())
 
     def search_company(self, query: str, exchange: str = "NSE") -> List[Dict[str, str]]:
         """
@@ -132,10 +187,57 @@ class StockFetcher:
         try:
             logger.info(f"Fetching {exchange} announcements for {symbol}")
 
-            if exchange.upper() != "NSE":
-                # BSE endpoint mapping is not stable for symbol-only queries.
-                # Keep empty for now to avoid false/misleading alerts.
-                return []
+            if exchange.upper() == "BSE":
+                scrip = self._get_bse_scrip_code(symbol)
+                if not scrip:
+                    logger.warning(f"No BSE scrip code mapping found for {symbol}")
+                    return []
+
+                data = self._get_bse_json(
+                    "AnnSubCategoryGetData/w",
+                    {
+                        "pageno": "1",
+                        "strCat": "-1",
+                        "strPrevDate": "20200101",
+                        "strScrip": scrip,
+                        "strSearch": "S",
+                        "strToDate": "20991231",
+                        "strType": "C",
+                        "subcategory": "-1",
+                    },
+                )
+                table = data.get("Table", []) if isinstance(data, dict) else []
+
+                announcements: List[Dict] = []
+                for item in table:
+                    title = item.get("NEWSSUB") or item.get("HEADLINE") or "Corporate Announcement"
+                    date = item.get("DT_TM") or item.get("NEWS_DT") or ""
+                    attachment = item.get("ATTACHMENTNAME") or ""
+                    link = (
+                        f"https://www.bseindia.com/xml-data/corpfiling/AttachHis/{attachment}"
+                        if attachment
+                        else item.get("NSURL") or ""
+                    )
+
+                    announcement_id = item.get("NEWSID") or self._make_id(
+                        symbol.upper(),
+                        str(date),
+                        str(title),
+                        str(link),
+                    )
+
+                    announcements.append(
+                        {
+                            "id": str(announcement_id),
+                            "title": str(title),
+                            "date": str(date),
+                            "description": str(item.get("HEADLINE") or ""),
+                            "link": str(link),
+                        }
+                    )
+
+                announcements.sort(key=lambda x: self._date_key(x.get("date", "")), reverse=True)
+                return announcements[:50]
 
             raw_items = self._get_nse_json(
                 "corporate-announcements",
@@ -174,6 +276,7 @@ class StockFetcher:
                     }
                 )
 
+            announcements.sort(key=lambda x: self._date_key(x.get("date", "")), reverse=True)
             # NSE returns long history; cap list to avoid flooding alerts.
             return announcements[:50]
             
@@ -194,8 +297,55 @@ class StockFetcher:
         try:
             logger.info(f"Fetching {exchange} corporate actions for {symbol}")
 
-            if exchange.upper() != "NSE":
-                return []
+            if exchange.upper() == "BSE":
+                scrip = self._get_bse_scrip_code(symbol)
+                if not scrip:
+                    logger.warning(f"No BSE scrip code mapping found for {symbol}")
+                    return []
+
+                data = self._get_bse_json(
+                    "DefaultData/w",
+                    {
+                        "scripcode": scrip,
+                        "Fdate": "",
+                        "Purposecode": "",
+                        "TDate": "",
+                        "ddlcategorys": "E",
+                        "ddlindustrys": "",
+                        "segment": "0",
+                        "strSearch": "D",
+                    },
+                )
+                table = data if isinstance(data, list) else []
+                if isinstance(data, dict):
+                    # Some responses can be wrapped in a "Table" key depending on deployment.
+                    table = data.get("Table", [])
+
+                actions: List[Dict] = []
+                for item in table:
+                    title = item.get("Purpose") or "Corporate Action"
+                    action_type = item.get("Purpose") or "Action"
+                    date = item.get("Ex_date") or item.get("RD_Date") or ""
+
+                    action_id = self._make_id(
+                        symbol.upper(),
+                        str(date),
+                        str(title),
+                    )
+
+                    actions.append(
+                        {
+                            "id": str(action_id),
+                            "type": str(action_type),
+                            "title": str(title),
+                            "date": str(date),
+                            "description": str(item.get("long_name") or ""),
+                            "link": "",
+                        }
+                    )
+
+                actions.sort(key=lambda x: self._date_key(x.get("date", "")), reverse=True)
+                return actions[:50]
 
             raw_items = self._get_nse_json(
                 "corporates-corporateActions",
@@ -232,6 +382,7 @@ class StockFetcher:
                     }
                 )
 
+            actions.sort(key=lambda x: self._date_key(x.get("date", "")), reverse=True)
             # Keep a bounded set for each run to avoid old-history spam.
             return actions[:50]
             
