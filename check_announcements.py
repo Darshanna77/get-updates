@@ -187,10 +187,15 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                         await reply(
                             bot,
                             chat_id,
-                            f"No latest updates found for *{symbol}* ({exchange}).",
+                            f"No latest updates found for *{symbol}* ({exchange}).\n"
+                            f"_Note: /latest is test-only and does not add to watchlist._",
                         )
                     else:
-                        out = [f"📌 *Latest updates for {symbol} ({exchange})*", ""]
+                        out = [
+                            f"📌 *Latest updates for {symbol} ({exchange})*",
+                            "_Test-only command: this does NOT add company to watchlist._",
+                            "",
+                        ]
 
                         if anns:
                             out.append("*Announcements:*")
@@ -424,10 +429,17 @@ async def main():
     # 2. Check for new announcements
     ann_count, act_count, total = await run_announcement_check(bot, db, fetcher)
 
+    # Current monitored symbols for clarity
+    monitored = db.get_watchlist()
+    monitored_list = ", ".join(
+        [f"{x['symbol']}({x['exchange']})" for x in monitored]
+    ) or "None"
+
     # 3. Send summary
     await send_to_all_chats(bot,
         f"✅ *Check completed* – {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         f"📊 Companies checked: {total}\n"
+        f"📋 Monitored: {monitored_list}\n"
         f"📢 New announcements: {ann_count}\n"
         f"💼 New corporate actions: {act_count}\n\n"
         f"_Send /help for available commands\\._"
