@@ -1,8 +1,9 @@
 """NSE and BSE data fetcher for corporate announcements and actions."""
-import requests
-from bs4 import BeautifulSoup
-from typing import List, Dict, Optional
+import hashlib
 import logging
+from typing import Dict, List, Optional
+
+import requests
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -42,8 +43,40 @@ class StockFetcher:
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://www.nseindia.com/",
+            "Connection": "keep-alive",
         })
+        self._nse_session_ready = False
+
+    def _make_id(self, *parts: str) -> str:
+        """Create a deterministic ID for de-duplication."""
+        payload = "|".join(parts)
+        return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+    def _prepare_nse_session(self):
+        """Prime NSE cookies once before API calls."""
+        if self._nse_session_ready:
+            return
+        self.session.get("https://www.nseindia.com", timeout=20)
+        self._nse_session_ready = True
+
+    def _get_nse_json(self, endpoint: str, params: Dict[str, str]) -> List[Dict]:
+        """Fetch JSON list from NSE API endpoint."""
+        self._prepare_nse_session()
+        url = f"https://www.nseindia.com/api/{endpoint}"
+        resp = self.session.get(url, params=params, timeout=25)
+        resp.raise_for_status()
+        data = resp.json()
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            if isinstance(data.get("data"), list):
+                return data["data"]
+            return []
+        return []
 
     def search_company(self, query: str, exchange: str = "NSE") -> List[Dict[str, str]]:
         """
@@ -98,10 +131,51 @@ class StockFetcher:
         """
         try:
             logger.info(f"Fetching {exchange} announcements for {symbol}")
-            
-            # Placeholder - returns empty list
-            # In production, you would scrape or call exchange API
-            return []
+
+            if exchange.upper() != "NSE":
+                # BSE endpoint mapping is not stable for symbol-only queries.
+                # Keep empty for now to avoid false/misleading alerts.
+                return []
+
+            raw_items = self._get_nse_json(
+                "corporate-announcements",
+                {"index": "equities", "symbol": symbol.upper()},
+            )
+
+            announcements: List[Dict] = []
+            for item in raw_items:
+                item_symbol = (item.get("symbol") or item.get("sm_name") or "").upper()
+                if symbol.upper() not in item_symbol and item.get("symbol") != symbol.upper():
+                    continue
+
+                title = (
+                    item.get("subject")
+                    or item.get("desc")
+                    or item.get("attchmntText")
+                    or "Corporate Announcement"
+                )
+                date = item.get("an_dt") or item.get("date") or ""
+                link = item.get("attchmntFile") or item.get("xbrl") or ""
+
+                announcement_id = item.get("id") or self._make_id(
+                    symbol.upper(),
+                    date,
+                    title,
+                    link,
+                )
+
+                announcements.append(
+                    {
+                        "id": str(announcement_id),
+                        "title": str(title),
+                        "date": str(date),
+                        "description": str(item.get("desc") or ""),
+                        "link": str(link),
+                    }
+                )
+
+            # NSE returns long history; cap list to avoid flooding alerts.
+            return announcements[:50]
             
         except Exception as e:
             logger.error(f"Error fetching announcements for {symbol} ({exchange}): {e}")
@@ -119,10 +193,47 @@ class StockFetcher:
         """
         try:
             logger.info(f"Fetching {exchange} corporate actions for {symbol}")
-            
-            # Placeholder - returns empty list
-            # In production, you would scrape or call exchange API
-            return []
+
+            if exchange.upper() != "NSE":
+                return []
+
+            raw_items = self._get_nse_json(
+                "corporates-corporateActions",
+                {"index": "equities", "symbol": symbol.upper()},
+            )
+
+            actions: List[Dict] = []
+            for item in raw_items:
+                title = (
+                    item.get("purpose")
+                    or item.get("subject")
+                    or item.get("caType")
+                    or "Corporate Action"
+                )
+                action_type = item.get("caType") or item.get("purpose") or "Action"
+                date = item.get("exDate") or item.get("recordDate") or item.get("ndStartDate") or ""
+                link = item.get("attchmntFile") or item.get("xbrl") or ""
+
+                action_id = item.get("id") or self._make_id(
+                    symbol.upper(),
+                    str(date),
+                    str(title),
+                    str(action_type),
+                )
+
+                actions.append(
+                    {
+                        "id": str(action_id),
+                        "type": str(action_type),
+                        "title": str(title),
+                        "date": str(date),
+                        "description": str(item.get("comp") or ""),
+                        "link": str(link),
+                    }
+                )
+
+            # Keep a bounded set for each run to avoid old-history spam.
+            return actions[:50]
             
         except Exception as e:
             logger.error(f"Error fetching corporate actions for {symbol} ({exchange}): {e}")
@@ -137,3 +248,14 @@ class StockFetcher:
         """Get company name for a symbol."""
         symbols = NSE_SYMBOLS if exchange.upper() == "NSE" else BSE_SYMBOLS
         return symbols.get(symbol.upper())
+
+    def get_latest_updates(
+        self,
+        symbol: str,
+        exchange: str = "NSE",
+        max_items: int = 3,
+    ) -> Dict[str, List[Dict]]:
+        """Return latest announcements and corporate actions for one company."""
+        announcements = self.get_announcements(symbol, exchange)[:max_items]
+        actions = self.get_corporate_actions(symbol, exchange)[:max_items]
+        return {"announcements": announcements, "actions": actions}

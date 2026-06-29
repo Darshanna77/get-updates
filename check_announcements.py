@@ -12,6 +12,7 @@ Commands (send these to your bot on Telegram):
   /remove SYMBOL [EXCHANGE]– e.g. /remove INFY NSE
   /list                    – show current watchlist
   /search QUERY            – search NSE+BSE
+    /latest SYMBOL [EXCHANGE]– latest announcement/actions for a company
   /status                  – bot status
 """
 import asyncio
@@ -98,6 +99,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                 "`/list` – show your watchlist\n"
                 "`/view` – alias for /list\n"
                 "`/search QUERY` – find a company\n"
+                "`/latest SYMBOL [EXCHANGE]` – latest updates for one company\n"
                 "`/check` – run immediate check\n"
                 "`/status` – bot status\n"
                 "`/help` – show this message\n\n"
@@ -148,6 +150,59 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                         + "\n\n_To add: /add SYMBOL EXCHANGE_\n"
                           "_e\\.g\\. /add INFY NSE_"
                     )
+
+        # /latest ─────────────────────────────────────────────────────────
+        elif cmd == "/latest":
+            if len(parts) < 2:
+                await reply(
+                    bot,
+                    chat_id,
+                    "Usage: `/latest SYMBOL [EXCHANGE]`\n"
+                    "_Exchange defaults to NSE if omitted._\n"
+                    "_Example: /latest INFY NSE_",
+                )
+            else:
+                symbol = parts[1].upper()
+                exchange = parts[2].upper() if len(parts) >= 3 else "NSE"
+
+                if exchange not in ("NSE", "BSE"):
+                    await reply(bot, chat_id, "❌ Exchange must be `NSE` or `BSE`.")
+                else:
+                    updates = fetcher.get_latest_updates(symbol, exchange, max_items=2)
+                    anns = updates["announcements"]
+                    acts = updates["actions"]
+
+                    if not anns and not acts:
+                        await reply(
+                            bot,
+                            chat_id,
+                            f"No latest updates found for *{symbol}* ({exchange}).",
+                        )
+                    else:
+                        out = [f"📌 *Latest updates for {symbol} ({exchange})*", ""]
+
+                        if anns:
+                            out.append("*Announcements:*")
+                            for i, ann in enumerate(anns, 1):
+                                out.append(
+                                    f"{i}. {ann.get('date', 'N/A')}\n"
+                                    f"   {ann.get('title', 'N/A')}"
+                                )
+                                if ann.get("link"):
+                                    out.append(f"   🔗 {ann['link']}")
+                            out.append("")
+
+                        if acts:
+                            out.append("*Corporate Actions:*")
+                            for i, action in enumerate(acts, 1):
+                                out.append(
+                                    f"{i}. {action.get('date', 'N/A')}\n"
+                                    f"   {action.get('type', 'Action')} - {action.get('title', 'N/A')}"
+                                )
+                                if action.get("link"):
+                                    out.append(f"   🔗 {action['link']}")
+
+                        await reply(bot, chat_id, "\n".join(out))
 
         # /add ────────────────────────────────────────────────────────────
         elif cmd == "/add":
@@ -267,6 +322,7 @@ async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
                         f"🏛️  Exchange: {exchange}\n"
                         f"📄 {ann.get('title', 'N/A')}\n"
                         f"📅 {ann.get('date', 'N/A')}"
+                        + (f"\n🔗 {ann.get('link')}" if ann.get("link") else "")
                     )
         except Exception as e:
             logger.error(f"Announcements error for {symbol}: {e}")
@@ -286,6 +342,7 @@ async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
                         f"📝 Type: {action.get('type', 'N/A')}\n"
                         f"📄 {action.get('title', 'N/A')}\n"
                         f"📅 {action.get('date', 'N/A')}"
+                        + (f"\n🔗 {action.get('link')}" if action.get("link") else "")
                     )
         except Exception as e:
             logger.error(f"Corporate actions error for {symbol}: {e}")
