@@ -78,8 +78,46 @@ class Database:
                 """
             )
 
+            # Bot state table – stores key/value pairs (e.g. last_update_id)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS bot_state (
+                    key   TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                )
+                """
+            )
+
             cursor.close()
             print(f"Database initialized at {self.db_path}")
+
+    # ------------------------------------------------------------------
+    # Bot state helpers (tracks last Telegram update_id)
+    # ------------------------------------------------------------------
+
+    def get_last_update_id(self) -> int:
+        """Return the last processed Telegram update_id (0 if none)."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT value FROM bot_state WHERE key = 'last_update_id'"
+            )
+            result = cursor.fetchone()
+            cursor.close()
+            return int(result[0]) if result else 0
+
+    def set_last_update_id(self, update_id: int):
+        """Persist the last processed Telegram update_id."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO bot_state (key, value)
+                VALUES ('last_update_id', ?)
+                """,
+                (str(update_id),),
+            )
+            cursor.close()
 
     def add_to_watchlist(self, symbol: str, company_name: str, exchange: str = "NSE") -> bool:
         """Add company to watchlist."""
