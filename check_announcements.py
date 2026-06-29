@@ -86,6 +86,40 @@ def parse_flexible_date(date_str: str) -> Optional[datetime]:
     return None
 
 
+def classify_action_group(action: dict) -> str:
+    """Group actions into meeting/discussion vs price/capital related buckets."""
+    text = f"{action.get('type', '')} {action.get('title', '')}".casefold()
+    meeting_keywords = (
+        "meeting",
+        "discussion",
+        "agm",
+        "egm",
+        "conference call",
+        "investor meet",
+        "board meeting",
+        "postal ballot",
+    )
+    if any(k in text for k in meeting_keywords):
+        return "meeting"
+    return "price"
+
+
+async def send_chunked_lines(bot: Bot, chat_id: int, header: str, lines: list[str], chunk_limit: int = 3500):
+    """Send long line lists in Telegram-safe chunks."""
+    if not lines:
+        await reply(bot, chat_id, f"{header}\nNone", parse_mode=None)
+        return
+
+    chunk = header + "\n"
+    for line in lines:
+        if len(chunk) + len(line) + 1 > chunk_limit:
+            await reply(bot, chat_id, chunk, parse_mode=None)
+            chunk = ""
+        chunk += line + "\n"
+    if chunk.strip():
+        await reply(bot, chat_id, chunk, parse_mode=None)
+
+
 # ---------------------------------------------------------------------------
 # Command processor  (runs at the start of every GitHub Actions job)
 # ---------------------------------------------------------------------------
@@ -273,25 +307,33 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                             f"No corporate actions found for last 10 years for *{symbol}* ({exchange}).",
                         )
                     else:
-                        header = (
-                            f"📚 Corporate actions summary (last 10 years) for {symbol} ({exchange})\n"
-                            f"Total actions: {len(filtered)}\n\n"
-                        )
-                        lines = []
+                        price_lines = []
+                        meeting_lines = []
                         for idx, act in enumerate(filtered, 1):
-                            lines.append(
-                                f"{idx}. {act.get('date', 'N/A')} - {act.get('title', 'N/A')}"
-                            )
+                            line = f"{idx}. {act.get('date', 'N/A')} - {act.get('title', 'N/A')}"
+                            if classify_action_group(act) == "meeting":
+                                meeting_lines.append(line)
+                            else:
+                                price_lines.append(line)
 
-                        # Telegram limit ~4096 chars; send in safe chunks.
-                        chunk = header
-                        for line in lines:
-                            if len(chunk) + len(line) + 1 > 3500:
-                                await reply(bot, chat_id, chunk, parse_mode=None)
-                                chunk = ""
-                            chunk += line + "\n"
-                        if chunk.strip():
-                            await reply(bot, chat_id, chunk, parse_mode=None)
+                        await send_chunked_lines(
+                            bot,
+                            chat_id,
+                            (
+                                f"📈 Price/Capital related actions (last 10 years) for {symbol} ({exchange})\n"
+                                f"Count: {len(price_lines)}"
+                            ),
+                            price_lines,
+                        )
+                        await send_chunked_lines(
+                            bot,
+                            chat_id,
+                            (
+                                f"🗓️ Meetings/Discussions (last 10 years) for {symbol} ({exchange})\n"
+                                f"Count: {len(meeting_lines)}"
+                            ),
+                            meeting_lines,
+                        )
 
         # /add ────────────────────────────────────────────────────────────
         elif cmd == "/add":
@@ -360,17 +402,6 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                 f"✅ Running via GitHub Actions"
             )
 
-        # /check ──────────────────────────────────────────────────────────
-        elif cmd == "/check":
-            await reply(bot, chat_id, "⏳ Running manual check now...")
-            ann_count, act_count, total = await run_announcement_check(bot, db, fetcher)
-            await reply(bot, chat_id,
-                f"✅ *Manual check complete*\n\n"
-                f"📊 Companies checked: {total}\n"
-                f"📢 New announcements: {ann_count}\n"
-                f"💼 New corporate actions: {act_count}"
-            )
-
         # unknown ─────────────────────────────────────────────────────────
         else:
             await reply(bot, chat_id,
@@ -410,18 +441,20 @@ async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
                         exchange,
                         ann.get("link", ""),
                     )
+                    src = resolved.get("source", exchange)
+                    download_link = resolved.get("link", "")
+                    release_link = ann.get("release_link") or exchange_fallback_link(symbol, exchange)
+                    summary = ann.get("description") or ann.get("title", "N/A")
                     await send_to_all_chats(bot,
-                        f"📢 *New Announcement*\n\n"
-                        f"🏢 {company['name']} \\({symbol}\\)\n"
-                        f"🏛️  Exchange: {exchange}\n"
-                        f"📄 {ann.get('title', 'N/A')}\n"
-                        f"📅 {ann.get('date', 'N/A')}"
-                        + (
-                            f"\n🔗 ({resolved.get('source', exchange)}) {resolved.get('link')}"
-                            if resolved.get("link")
-                            else ""
-                        )
-                        + f"\n🌐 {exchange_fallback_link(symbol, exchange)}"
+                        f"📢 New Announcement for {company['name']} ({symbol})\n"
+                        f"Exchange: {exchange}\n\n"
+                        f"Type of Information: {ann.get('type', 'Announcement')}\n"
+                        f"Information Date: {ann.get('date', 'N/A')}\n"
+                        f"Summary: {summary}\n"
+                        f"Published Date: {ann.get('published_date', ann.get('date', 'N/A'))}\n"
+                        f"Release Link: {release_link}\n"
+                        f"Download Copy: {(f'({src}) ' + download_link) if download_link else 'Not available'}\n"
+                        f"Exchange Page: {exchange_fallback_link(symbol, exchange)}"
                     , parse_mode=None)
         except Exception as e:
             logger.error(f"Announcements error for {symbol}: {e}")
@@ -439,19 +472,18 @@ async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
                         exchange,
                         action.get("link", ""),
                     )
+                    src = resolved.get("source", exchange)
+                    link = resolved.get("link", "")
+                    group_name = "Meetings/Discussions" if classify_action_group(action) == "meeting" else "Price/Capital Related"
                     await send_to_all_chats(bot,
-                        f"💼 *New Corporate Action*\n\n"
-                        f"🏢 {company['name']} \\({symbol}\\)\n"
-                        f"🏛️  Exchange: {exchange}\n"
-                        f"📝 Type: {action.get('type', 'N/A')}\n"
-                        f"📄 {action.get('title', 'N/A')}\n"
-                        f"📅 {action.get('date', 'N/A')}"
-                        + (
-                            f"\n🔗 ({resolved.get('source', exchange)}) {resolved.get('link')}"
-                            if resolved.get("link")
-                            else ""
-                        )
-                        + f"\n🌐 {exchange_fallback_link(symbol, exchange)}"
+                        f"💼 New Corporate Action for {company['name']} ({symbol})\n"
+                        f"Exchange: {exchange}\n\n"
+                        f"Category Group: {group_name}\n"
+                        f"Date: {action.get('date', 'N/A')}\n"
+                        f"Summary: {action.get('title', 'N/A')}\n"
+                        f"Type: {action.get('type', 'N/A')}\n"
+                        f"Download Copy: {(f'({src}) ' + link) if link else 'Not available'}\n"
+                        f"Exchange Page: {exchange_fallback_link(symbol, exchange)}"
                     , parse_mode=None)
         except Exception as e:
             logger.error(f"Corporate actions error for {symbol}: {e}")
