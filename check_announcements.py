@@ -23,8 +23,10 @@ async def send_to_all_chats(bot: Bot, text: str):
                 text=text,
                 parse_mode="Markdown"
             )
+            logger.info(f"✓ Message sent to chat_id: {chat_id}")
         except Exception as e:
-            logger.error(f"Failed to send message to chat {chat_id}: {e}")
+            logger.error(f"✗ Failed to send to chat_id {chat_id}: {e}")
+            logger.error("  → Make sure you've sent /start to your bot on Telegram first!")
 
 
 async def check_announcements():
@@ -32,6 +34,17 @@ async def check_announcements():
     db = Database()
     fetcher = StockFetcher()
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
+
+    # Verify bot connectivity
+    try:
+        bot_info = await bot.get_me()
+        logger.info(f"✓ Bot connected: @{bot_info.username} ({bot_info.first_name})")
+    except Exception as e:
+        logger.error(f"✗ Bot connection failed: {e}")
+        logger.error("  → Check TELEGRAM_BOT_TOKEN secret in GitHub Actions")
+        return
+
+    logger.info(f"✓ Sending to chat IDs: {TELEGRAM_CHAT_IDS}")
 
     watchlist = db.get_watchlist()
     logger.info(f"Checking {len(watchlist)} companies...")
