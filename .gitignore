@@ -38,6 +38,7 @@ wheels/
 *.db
 *.sqlite
 *.sqlite3
+!nse_bot.db
 
 # Logs
 logs/

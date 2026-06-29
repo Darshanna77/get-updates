@@ -96,14 +96,16 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                 "`/remove SYMBOL [EXCHANGE]` – remove from watchlist\n"
                 "  _e.g. /remove INFY NSE_\n\n"
                 "`/list` – show your watchlist\n"
+                "`/view` – alias for /list\n"
                 "`/search QUERY` – find a company\n"
+                "`/check` – run immediate check\n"
                 "`/status` – bot status\n"
                 "`/help` – show this message\n\n"
                 "_Commands are processed within 5 minutes \\(next scheduled run\\)._"
             )
 
-        # /list ───────────────────────────────────────────────────────────
-        elif cmd == "/list":
+        # /list (/view, /veiw aliases) ───────────────────────────────────
+        elif cmd in ("/list", "/view", "/veiw"):
             watchlist = db.get_watchlist()
             if not watchlist:
                 await reply(bot, chat_id,
@@ -212,6 +214,17 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                 f"📋 Watchlist: {len(watchlist)} companies\n"
                 f"🔄 Poll interval: every 5 minutes\n"
                 f"✅ Running via GitHub Actions"
+            )
+
+        # /check ──────────────────────────────────────────────────────────
+        elif cmd == "/check":
+            await reply(bot, chat_id, "⏳ Running manual check now...")
+            ann_count, act_count, total = await run_announcement_check(bot, db, fetcher)
+            await reply(bot, chat_id,
+                f"✅ *Manual check complete*\n\n"
+                f"📊 Companies checked: {total}\n"
+                f"📢 New announcements: {ann_count}\n"
+                f"💼 New corporate actions: {act_count}"
             )
 
         # unknown ─────────────────────────────────────────────────────────

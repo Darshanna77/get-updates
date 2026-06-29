@@ -8,6 +8,8 @@ on:
 
 jobs:
   check:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     
     steps:
@@ -16,11 +18,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download previous database
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: nse-bot-database
+      - name: Ensure database file exists
+        run: |
+          touch nse_bot.db
       
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -38,11 +38,15 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
         run: python check_announcements.py
-      
-      - name: Persist database changes
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: nse-bot-database
-          path: nse_bot.db
-          retention-days: 30
+
+      - name: Commit database changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add nse_bot.db
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update bot database [skip ci]"
+            git push
+          else
+            echo "No database changes to commit"
+          fi
