@@ -17,6 +17,7 @@ Commands (send these to your bot on Telegram):
 """
 import asyncio
 import logging
+from typing import Optional
 from database import Database
 from nse_fetcher import StockFetcher
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS
@@ -34,19 +35,19 @@ logger = logging.getLogger(__name__)
 # Helpers
 # ---------------------------------------------------------------------------
 
-async def reply(bot: Bot, chat_id: int, text: str):
-    """Send a Markdown-formatted message to one chat."""
+async def reply(bot: Bot, chat_id: int, text: str, parse_mode: Optional[str] = "Markdown"):
+    """Send a message to one chat."""
     try:
-        await bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
+        await bot.send_message(chat_id=chat_id, text=text, parse_mode=parse_mode)
     except Exception as e:
         logger.error(f"✗ Failed to send to {chat_id}: {e}")
 
 
-async def send_to_all_chats(bot: Bot, text: str):
+async def send_to_all_chats(bot: Bot, text: str, parse_mode: Optional[str] = "Markdown"):
     """Broadcast a message to every configured chat ID."""
     for chat_id in TELEGRAM_CHAT_IDS:
         try:
-            await bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
+            await bot.send_message(chat_id=chat_id, text=text, parse_mode=parse_mode)
             logger.info(f"✓ Message sent to chat_id: {chat_id}")
         except Exception as e:
             logger.error(f"✗ Failed to send to chat_id {chat_id}: {e}")
@@ -168,7 +169,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                 if exchange not in ("NSE", "BSE"):
                     await reply(bot, chat_id, "❌ Exchange must be `NSE` or `BSE`.")
                 else:
-                    updates = fetcher.get_latest_updates(symbol, exchange, max_items=2)
+                    updates = fetcher.get_latest_updates(symbol, exchange, max_items=4)
                     anns = updates["announcements"]
                     acts = updates["actions"]
 
@@ -202,7 +203,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                                 if action.get("link"):
                                     out.append(f"   🔗 {action['link']}")
 
-                        await reply(bot, chat_id, "\n".join(out))
+                        await reply(bot, chat_id, "\n".join(out), parse_mode=None)
 
         # /add ────────────────────────────────────────────────────────────
         elif cmd == "/add":
@@ -310,7 +311,7 @@ async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
         logger.info(f"  → {symbol} ({exchange})")
 
         try:
-            for ann in fetcher.get_announcements(symbol, exchange):
+            for ann in fetcher.get_announcements(symbol, exchange)[:4]:
                 if db.mark_announcement_processed(
                     symbol, exchange,
                     ann.get("id", ""), ann.get("title", ""), ann.get("date", ""),
@@ -323,12 +324,12 @@ async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
                         f"📄 {ann.get('title', 'N/A')}\n"
                         f"📅 {ann.get('date', 'N/A')}"
                         + (f"\n🔗 {ann.get('link')}" if ann.get("link") else "")
-                    )
+                    , parse_mode=None)
         except Exception as e:
             logger.error(f"Announcements error for {symbol}: {e}")
 
         try:
-            for action in fetcher.get_corporate_actions(symbol, exchange):
+            for action in fetcher.get_corporate_actions(symbol, exchange)[:4]:
                 if db.mark_corporate_action_processed(
                     symbol, exchange,
                     action.get("id", ""), action.get("type", ""),
@@ -343,7 +344,7 @@ async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
                         f"📄 {action.get('title', 'N/A')}\n"
                         f"📅 {action.get('date', 'N/A')}"
                         + (f"\n🔗 {action.get('link')}" if action.get("link") else "")
-                    )
+                    , parse_mode=None)
         except Exception as e:
             logger.error(f"Corporate actions error for {symbol}: {e}")
 

@@ -404,7 +404,7 @@ class StockFetcher:
         self,
         symbol: str,
         exchange: str = "NSE",
-        max_items: int = 3,
+        max_items: int = 4,
     ) -> Dict[str, List[Dict]]:
         """Return latest announcements and corporate actions for one company."""
         announcements = self.get_announcements(symbol, exchange)[:max_items]
