@@ -19,7 +19,7 @@ import asyncio
 import logging
 from typing import Optional
 from database import Database
-from nse_fetcher import StockFetcher
+from nse_fetcher import BSE_SCRIP_CODES, StockFetcher
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS
 from telegram import Bot
 from datetime import datetime
@@ -52,6 +52,16 @@ async def send_to_all_chats(bot: Bot, text: str, parse_mode: Optional[str] = "Ma
         except Exception as e:
             logger.error(f"✗ Failed to send to chat_id {chat_id}: {e}")
             logger.error("  → Make sure you have sent /start to the bot on Telegram first!")
+
+
+def exchange_fallback_link(symbol: str, exchange: str) -> str:
+    """Return a stable fallback page URL for the symbol/exchange."""
+    if exchange.upper() == "NSE":
+        return f"https://www.nseindia.com/get-quotes/equity?symbol={symbol.upper()}"
+    scrip = BSE_SCRIP_CODES.get(symbol.upper(), "")
+    if scrip:
+        return f"https://www.bseindia.com/stock-share-price/-/-/{scrip}/"
+    return "https://www.bseindia.com/"
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +201,9 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                                 )
                                 if ann.get("link"):
                                     out.append(f"   🔗 {ann['link']}")
+                                out.append(
+                                    f"   🌐 {exchange_fallback_link(symbol, exchange)}"
+                                )
                             out.append("")
 
                         if acts:
@@ -202,6 +215,9 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                                 )
                                 if action.get("link"):
                                     out.append(f"   🔗 {action['link']}")
+                                out.append(
+                                    f"   🌐 {exchange_fallback_link(symbol, exchange)}"
+                                )
 
                         await reply(bot, chat_id, "\n".join(out), parse_mode=None)
 
@@ -324,6 +340,7 @@ async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
                         f"📄 {ann.get('title', 'N/A')}\n"
                         f"📅 {ann.get('date', 'N/A')}"
                         + (f"\n🔗 {ann.get('link')}" if ann.get("link") else "")
+                        + f"\n🌐 {exchange_fallback_link(symbol, exchange)}"
                     , parse_mode=None)
         except Exception as e:
             logger.error(f"Announcements error for {symbol}: {e}")
@@ -344,6 +361,7 @@ async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
                         f"📄 {action.get('title', 'N/A')}\n"
                         f"📅 {action.get('date', 'N/A')}"
                         + (f"\n🔗 {action.get('link')}" if action.get("link") else "")
+                        + f"\n🌐 {exchange_fallback_link(symbol, exchange)}"
                     , parse_mode=None)
         except Exception as e:
             logger.error(f"Corporate actions error for {symbol}: {e}")
