@@ -195,12 +195,18 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                         if anns:
                             out.append("*Announcements:*")
                             for i, ann in enumerate(anns, 1):
+                                resolved = fetcher.resolve_statement_link(
+                                    symbol,
+                                    exchange,
+                                    ann.get("link", ""),
+                                )
                                 out.append(
                                     f"{i}. {ann.get('date', 'N/A')}\n"
                                     f"   {ann.get('title', 'N/A')}"
                                 )
-                                if ann.get("link"):
-                                    out.append(f"   🔗 {ann['link']}")
+                                if resolved.get("link"):
+                                    src = resolved.get("source", exchange)
+                                    out.append(f"   🔗 ({src}) {resolved['link']}")
                                 out.append(
                                     f"   🌐 {exchange_fallback_link(symbol, exchange)}"
                                 )
@@ -209,12 +215,18 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                         if acts:
                             out.append("*Corporate Actions:*")
                             for i, action in enumerate(acts, 1):
+                                resolved = fetcher.resolve_statement_link(
+                                    symbol,
+                                    exchange,
+                                    action.get("link", ""),
+                                )
                                 out.append(
                                     f"{i}. {action.get('date', 'N/A')}\n"
                                     f"   {action.get('type', 'Action')} - {action.get('title', 'N/A')}"
                                 )
-                                if action.get("link"):
-                                    out.append(f"   🔗 {action['link']}")
+                                if resolved.get("link"):
+                                    src = resolved.get("source", exchange)
+                                    out.append(f"   🔗 ({src}) {resolved['link']}")
                                 out.append(
                                     f"   🌐 {exchange_fallback_link(symbol, exchange)}"
                                 )
@@ -333,13 +345,22 @@ async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
                     ann.get("id", ""), ann.get("title", ""), ann.get("date", ""),
                 ):
                     ann_count += 1
+                    resolved = fetcher.resolve_statement_link(
+                        symbol,
+                        exchange,
+                        ann.get("link", ""),
+                    )
                     await send_to_all_chats(bot,
                         f"📢 *New Announcement*\n\n"
                         f"🏢 {company['name']} \\({symbol}\\)\n"
                         f"🏛️  Exchange: {exchange}\n"
                         f"📄 {ann.get('title', 'N/A')}\n"
                         f"📅 {ann.get('date', 'N/A')}"
-                        + (f"\n🔗 {ann.get('link')}" if ann.get("link") else "")
+                        + (
+                            f"\n🔗 ({resolved.get('source', exchange)}) {resolved.get('link')}"
+                            if resolved.get("link")
+                            else ""
+                        )
                         + f"\n🌐 {exchange_fallback_link(symbol, exchange)}"
                     , parse_mode=None)
         except Exception as e:
@@ -353,6 +374,11 @@ async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
                     action.get("title", ""), action.get("date", ""),
                 ):
                     act_count += 1
+                    resolved = fetcher.resolve_statement_link(
+                        symbol,
+                        exchange,
+                        action.get("link", ""),
+                    )
                     await send_to_all_chats(bot,
                         f"💼 *New Corporate Action*\n\n"
                         f"🏢 {company['name']} \\({symbol}\\)\n"
@@ -360,7 +386,11 @@ async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
                         f"📝 Type: {action.get('type', 'N/A')}\n"
                         f"📄 {action.get('title', 'N/A')}\n"
                         f"📅 {action.get('date', 'N/A')}"
-                        + (f"\n🔗 {action.get('link')}" if action.get("link") else "")
+                        + (
+                            f"\n🔗 ({resolved.get('source', exchange)}) {resolved.get('link')}"
+                            if resolved.get("link")
+                            else ""
+                        )
                         + f"\n🌐 {exchange_fallback_link(symbol, exchange)}"
                     , parse_mode=None)
         except Exception as e:

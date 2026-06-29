@@ -1,6 +1,7 @@
 """NSE and BSE data fetcher for corporate announcements and actions."""
 import hashlib
 import logging
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -132,6 +133,49 @@ class StockFetcher:
     def _get_bse_scrip_code(self, symbol: str) -> Optional[str]:
         """Resolve BSE scrip code from symbol."""
         return BSE_SCRIP_CODES.get(symbol.upper())
+
+    def _is_link_reachable(self, url: str, retries: int = 3) -> bool:
+        """Check if a document URL is reachable with lightweight retries."""
+        if not url:
+            return False
+
+        for attempt in range(retries):
+            try:
+                # Some hosts reject HEAD, so try GET stream first.
+                resp = self.session.get(url, timeout=12, allow_redirects=True, stream=True)
+                if 200 <= resp.status_code < 300:
+                    return True
+            except Exception:
+                pass
+
+            # Small backoff for transient CDN/network errors.
+            time.sleep(0.8 * (attempt + 1))
+
+        return False
+
+    def resolve_statement_link(self, symbol: str, exchange: str, primary_link: str) -> Dict[str, str]:
+        """
+        Return best available statement link.
+
+        Strategy:
+        1) Retry primary link.
+        2) If still failing and exchange is NSE, fallback to latest reachable BSE announcement link.
+        3) Else return empty link.
+        """
+        if primary_link and self._is_link_reachable(primary_link):
+            return {"link": primary_link, "source": exchange.upper()}
+
+        if exchange.upper() == "NSE":
+            try:
+                bse_items = self.get_announcements(symbol, "BSE")
+                for item in bse_items:
+                    candidate = item.get("link") or ""
+                    if candidate and self._is_link_reachable(candidate, retries=2):
+                        return {"link": candidate, "source": "BSE"}
+            except Exception as e:
+                logger.warning(f"BSE fallback lookup failed for {symbol}: {e}")
+
+        return {"link": "", "source": ""}
 
     def search_company(self, query: str, exchange: str = "NSE") -> List[Dict[str, str]]:
         """
