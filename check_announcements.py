@@ -12,17 +12,18 @@ Commands (send these to your bot on Telegram):
   /remove SYMBOL [EXCHANGE]– e.g. /remove INFY NSE
   /list                    – show current watchlist
   /search QUERY            – search NSE+BSE
-    /latest SYMBOL [EXCHANGE]– latest announcement/actions for a company
+    /latestAnn SYMBOL [EXCHANGE] – latest 5 announcements (5 separate messages)
+    /latestAct SYMBOL [EXCHANGE] – corporate-action summary for last 10 years
   /status                  – bot status
 """
 import asyncio
 import logging
+from datetime import datetime
 from typing import Optional
 from database import Database
 from nse_fetcher import BSE_SCRIP_CODES, StockFetcher
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS
 from telegram import Bot
-from datetime import datetime
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -62,6 +63,27 @@ def exchange_fallback_link(symbol: str, exchange: str) -> str:
     if scrip:
         return f"https://www.bseindia.com/stock-share-price/-/-/{scrip}/"
     return "https://www.bseindia.com/"
+
+
+def parse_flexible_date(date_str: str) -> Optional[datetime]:
+    """Best-effort parser for exchange date formats."""
+    if not date_str:
+        return None
+    formats = [
+        "%d-%b-%Y %H:%M:%S",
+        "%d-%b-%Y",
+        "%Y-%m-%dT%H:%M:%S.%f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%d %b %Y",
+        "%d %b %Y %H:%M:%S",
+        "%Y%m%d",
+    ]
+    for fmt in formats:
+        try:
+            return datetime.strptime(str(date_str).strip(), fmt)
+        except ValueError:
+            continue
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +132,8 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                 "`/list` – show your watchlist\n"
                 "`/view` – alias for /list\n"
                 "`/search QUERY` – find a company\n"
-                "`/latest SYMBOL [EXCHANGE]` – latest updates for one company\n"
+                "`/latestAnn SYMBOL [EXCHANGE]` – latest 5 announcements\n"
+                "`/latestAct SYMBOL [EXCHANGE]` – 10-year action summary\n"
                 "`/check` – run immediate check\n"
                 "`/status` – bot status\n"
                 "`/help` – show this message\n\n"
@@ -162,15 +185,15 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                           "_e\\.g\\. /add INFY NSE_"
                     )
 
-        # /latest ─────────────────────────────────────────────────────────
-        elif cmd == "/latest":
+        # /latestAnn ──────────────────────────────────────────────────────
+        elif cmd == "/latestann":
             if len(parts) < 2:
                 await reply(
                     bot,
                     chat_id,
-                    "Usage: `/latest SYMBOL [EXCHANGE]`\n"
+                    "Usage: `/latestAnn SYMBOL [EXCHANGE]`\n"
                     "_Exchange defaults to NSE if omitted._\n"
-                    "_Example: /latest INFY NSE_",
+                    "_Example: /latestAnn INFY NSE_",
                 )
             else:
                 symbol = parts[1].upper()
@@ -179,64 +202,95 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                 if exchange not in ("NSE", "BSE"):
                     await reply(bot, chat_id, "❌ Exchange must be `NSE` or `BSE`.")
                 else:
-                    updates = fetcher.get_latest_updates(symbol, exchange, max_items=4)
-                    anns = updates["announcements"]
-                    acts = updates["actions"]
-
-                    if not anns and not acts:
+                    anns = fetcher.get_announcements(symbol, exchange)[:5]
+                    if not anns:
                         await reply(
                             bot,
                             chat_id,
-                            f"No latest updates found for *{symbol}* ({exchange}).\n"
-                            f"_Note: /latest is test-only and does not add to watchlist._",
+                            f"No recent announcements found for *{symbol}* ({exchange}).",
                         )
                     else:
-                        out = [
-                            f"📌 *Latest updates for {symbol} ({exchange})*",
-                            "_Test-only command: this does NOT add company to watchlist._",
-                            "",
-                        ]
+                        await reply(
+                            bot,
+                            chat_id,
+                            f"📌 Latest 5 announcements for {symbol} ({exchange})\n"
+                            f"(This does not change your watchlist)",
+                            parse_mode=None,
+                        )
+                        for i, ann in enumerate(anns, 1):
+                            resolved = fetcher.resolve_statement_link(
+                                symbol,
+                                exchange,
+                                ann.get("link", ""),
+                            )
+                            src = resolved.get("source", exchange)
+                            download_link = resolved.get("link", "")
+                            release_link = ann.get("release_link") or exchange_fallback_link(symbol, exchange)
+                            summary = ann.get("description") or ann.get("title", "N/A")
+                            message = (
+                                f"[{i}/5] Announcement for {symbol} ({exchange})\n\n"
+                                f"Type of Information: {ann.get('type', 'Announcement')}\n"
+                                f"Information Date: {ann.get('date', 'N/A')}\n"
+                                f"Summary: {summary}\n"
+                                f"Published Date: {ann.get('published_date', ann.get('date', 'N/A'))}\n"
+                                f"Release Link: {release_link}\n"
+                                f"Download Copy: {(f'({src}) ' + download_link) if download_link else 'Not available'}\n"
+                                f"Exchange Page: {exchange_fallback_link(symbol, exchange)}"
+                            )
+                            await reply(bot, chat_id, message, parse_mode=None)
 
-                        if anns:
-                            out.append("*Announcements:*")
-                            for i, ann in enumerate(anns, 1):
-                                resolved = fetcher.resolve_statement_link(
-                                    symbol,
-                                    exchange,
-                                    ann.get("link", ""),
-                                )
-                                out.append(
-                                    f"{i}. {ann.get('date', 'N/A')}\n"
-                                    f"   {ann.get('title', 'N/A')}"
-                                )
-                                if resolved.get("link"):
-                                    src = resolved.get("source", exchange)
-                                    out.append(f"   🔗 ({src}) {resolved['link']}")
-                                out.append(
-                                    f"   🌐 {exchange_fallback_link(symbol, exchange)}"
-                                )
-                            out.append("")
+        # /latestAct ──────────────────────────────────────────────────────
+        elif cmd == "/latestact":
+            if len(parts) < 2:
+                await reply(
+                    bot,
+                    chat_id,
+                    "Usage: `/latestAct SYMBOL [EXCHANGE]`\n"
+                    "_Exchange defaults to NSE if omitted._\n"
+                    "_Example: /latestAct INFY NSE_",
+                )
+            else:
+                symbol = parts[1].upper()
+                exchange = parts[2].upper() if len(parts) >= 3 else "NSE"
 
-                        if acts:
-                            out.append("*Corporate Actions:*")
-                            for i, action in enumerate(acts, 1):
-                                resolved = fetcher.resolve_statement_link(
-                                    symbol,
-                                    exchange,
-                                    action.get("link", ""),
-                                )
-                                out.append(
-                                    f"{i}. {action.get('date', 'N/A')}\n"
-                                    f"   {action.get('type', 'Action')} - {action.get('title', 'N/A')}"
-                                )
-                                if resolved.get("link"):
-                                    src = resolved.get("source", exchange)
-                                    out.append(f"   🔗 ({src}) {resolved['link']}")
-                                out.append(
-                                    f"   🌐 {exchange_fallback_link(symbol, exchange)}"
-                                )
+                if exchange not in ("NSE", "BSE"):
+                    await reply(bot, chat_id, "❌ Exchange must be `NSE` or `BSE`.")
+                else:
+                    actions = fetcher.get_corporate_actions(symbol, exchange)
+                    ten_years_ago = datetime.now().timestamp() - (10 * 365.25 * 24 * 3600)
 
-                        await reply(bot, chat_id, "\n".join(out), parse_mode=None)
+                    filtered = []
+                    for act in actions:
+                        dt = parse_flexible_date(act.get("date", ""))
+                        if dt is None or dt.timestamp() >= ten_years_ago:
+                            filtered.append(act)
+
+                    if not filtered:
+                        await reply(
+                            bot,
+                            chat_id,
+                            f"No corporate actions found for last 10 years for *{symbol}* ({exchange}).",
+                        )
+                    else:
+                        header = (
+                            f"📚 Corporate actions summary (last 10 years) for {symbol} ({exchange})\n"
+                            f"Total actions: {len(filtered)}\n\n"
+                        )
+                        lines = []
+                        for idx, act in enumerate(filtered, 1):
+                            lines.append(
+                                f"{idx}. {act.get('date', 'N/A')} - {act.get('title', 'N/A')}"
+                            )
+
+                        # Telegram limit ~4096 chars; send in safe chunks.
+                        chunk = header
+                        for line in lines:
+                            if len(chunk) + len(line) + 1 > 3500:
+                                await reply(bot, chat_id, chunk, parse_mode=None)
+                                chunk = ""
+                            chunk += line + "\n"
+                        if chunk.strip():
+                            await reply(bot, chat_id, chunk, parse_mode=None)
 
         # /add ────────────────────────────────────────────────────────────
         elif cmd == "/add":

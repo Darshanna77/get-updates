@@ -256,6 +256,7 @@ class StockFetcher:
                 for item in table:
                     title = item.get("NEWSSUB") or item.get("HEADLINE") or "Corporate Announcement"
                     date = item.get("DT_TM") or item.get("NEWS_DT") or ""
+                    ann_type = item.get("CATEGORYNAME") or item.get("SUBCATNAME") or "Announcement"
                     attachment = item.get("ATTACHMENTNAME") or ""
                     link = (
                         f"https://www.bseindia.com/xml-data/corpfiling/AttachHis/{attachment}"
@@ -275,8 +276,12 @@ class StockFetcher:
                             "id": str(announcement_id),
                             "title": str(title),
                             "date": str(date),
+                            "type": str(ann_type),
+                            "published_date": str(item.get("DissemDT") or date),
                             "description": str(item.get("HEADLINE") or ""),
                             "link": str(link),
+                            "release_link": str(item.get("NSURL") or ""),
+                            "download_link": str(link),
                         }
                     )
 
@@ -301,6 +306,7 @@ class StockFetcher:
                     or "Corporate Announcement"
                 )
                 date = item.get("an_dt") or item.get("date") or ""
+                ann_type = item.get("sm_name") or item.get("subjectType") or "Announcement"
                 link = item.get("attchmntFile") or item.get("xbrl") or ""
 
                 announcement_id = item.get("id") or self._make_id(
@@ -315,8 +321,12 @@ class StockFetcher:
                         "id": str(announcement_id),
                         "title": str(title),
                         "date": str(date),
+                        "type": str(ann_type),
+                        "published_date": str(item.get("an_dt") or date),
                         "description": str(item.get("desc") or ""),
                         "link": str(link),
+                        "release_link": str(item.get("xbrl") or ""),
+                        "download_link": str(link),
                     }
                 )
 
