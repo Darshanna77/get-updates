@@ -78,7 +78,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 🔍 **/search <entity_name>**
 Find SRCA entities by name or symbol
-Example: /search Infosys
+Example: /search NOCIL
 
 📌 **/add**
 Add a entity to your registry
@@ -112,7 +112,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text(
             "Usage: /search <entity_name_or_symbol>\n"
-            "Example: /search Infosys"
+            "Example: /search NOCIL"
         )
         return SEARCH_QUERY
 

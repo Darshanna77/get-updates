@@ -8,8 +8,8 @@ Each run:
 
 Commands (send these to your bot on Telegram):
   /start or /help          – show command list
-  /add TAG [SOURCE]        – e.g. /add INFY SRCA  (default source: SRCA)
-  /remove TAG [SOURCE]     – e.g. /remove INFY SRCA
+  /add TAG [SOURCE]        – e.g. /add NOCIL SRCA  (default source: SRCA)
+  /remove TAG [SOURCE]     – e.g. /remove NOCIL SRCA
   /list                    – show current registry
   /search QUERY            – search across all sources
     /latestBul TAG [SOURCE] – latest 5 bulletins (5 separate messages)
@@ -169,9 +169,9 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
                 "🤖 *Pulse Monitor Bot*\n\n"
                 "*Commands:*\n"
                 "`/add TAG [SOURCE]` – add to registry\n"
-                "  _e.g. /add INFY SRCA  or  /add SBIN SRCB_\n\n"
+                "  _e.g. /add NOCIL SRCA  or  /add APARAJYA SRCB_\n\n"
                 "`/remove TAG [SOURCE]` – remove from registry\n"
-                "  _e.g. /remove INFY SRCA_\n\n"
+                "  _e.g. /remove NOCIL SRCA_\n\n"
                 "`/list` – show your registry\n"
                 "`/view` – alias for /list\n"
                 "`/search QUERY` – find an entity\n"
@@ -190,7 +190,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
                 await reply(bot, chat_id,
                     "📋 Your registry is empty\.\n"
                     "Use `/add TAG SOURCE` to add an entity\.\n"
-                    "_Example: /add INFY SRCA_"
+                    "_Example: /add NOCIL SRCA_"
                 )
             else:
                 lines = "\n".join(
@@ -205,7 +205,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
         elif cmd == "/search":
             if len(parts) < 2:
                 await reply(bot, chat_id,
-                    "Usage: `/search QUERY`\n_Example: /search Infosys_"
+                    "Usage: `/search QUERY`\n_Example: /search NOCIL_"
                 )
             else:
                 query = " ".join(parts[1:])
@@ -225,7 +225,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
                         f"🔍 *Results for '{query}':*\n\n"
                         + "\n".join(lines)
                         + "\n\n_To add: /add TAG SOURCE_\n"
-                          "_e\.g\. /add INFY SRCA_"
+                          "_e\.g\. /add NOCIL SRCA_"
                     )
 
         # /latestBul ──────────────────────────────────────────────────────
@@ -236,7 +236,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
                     chat_id,
                     "Usage: `/latestBul TAG [SOURCE]`\n"
                     "_Source defaults to SRCA if omitted._\n"
-                    "_Example: /latestBul INFY SRCA_",
+                    "_Example: /latestBul NOCIL SRCA_",
                 )
             else:
                 symbol = parts[1].upper()
@@ -289,7 +289,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
                     chat_id,
                     "Usage: `/latestEvt TAG [SOURCE]`\n"
                     "_Source defaults to SRCA if omitted._\n"
-                    "_Example: /latestEvt INFY SRCA_",
+                    "_Example: /latestEvt NOCIL SRCA_",
                 )
             else:
                 symbol = parts[1].upper()
@@ -348,7 +348,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
                 await reply(bot, chat_id,
                     "Usage: `/add TAG \\[SOURCE\\]`\n"
                     "_Source defaults to SRCA if omitted\\._\n"
-                    "_Example: /add INFY SRCA_"
+                    "_Example: /add NOCIL SRCA_"
                 )
             else:
                 symbol   = parts[1].upper()
@@ -384,7 +384,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
                     await reply(bot, chat_id,
                         f"To remove, use:\n`/remove TAG SOURCE`\n\n"
                         f"*Current registry:*\n{lines}\n\n"
-                        f"_Example: /remove INFY SRCA_"
+                        f"_Example: /remove NOCIL SRCA_"
                     )
             else:
                 symbol   = parts[1].upper()

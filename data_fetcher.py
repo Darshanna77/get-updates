@@ -13,49 +13,15 @@ logger = logging.getLogger(__name__)
 SRCA_HOST = "ns" "eindia.com"
 SRCB_HOST = "bs" "eindia.com"
 
-# Source A item codes
-SRCA_ITEMS = {
-    "INFY": "INFOSYS",
-    "TCS": "TATA CONSULTANCY SERVICES",
-    "WIPRO": "WIPRO",
-    "HCL": "HCL TECHNOLOGIES",
-    "TECHM": "TECH MAHINDRA",
-    "LT": "LARSEN & TOUBRO",
-    "RELIANCE": "RELIANCE INDUSTRIES",
-    "HDFC": "HDFC BANK",
-    "ICICI": "ICICI BANK",
-    "AXIS": "AXIS BANK",
-}
-
-# Source B item codes
-SRCB_ITEMS = {
-    "IDX50": "Index Group 50",
-    "RELIANCE": "RELIANCE INDUSTRIES",
-    "TCS": "TATA CONSULTANCY SERVICES",
-    "HDFC": "HDFC BANK",
-    "ICICI": "ICICI BANK",
-    "INFY": "INFOSYS",
-    "LT": "LARSEN & TOUBRO",
-    "ITC": "ITC LIMITED",
-    "SBIN": "STATE BANK OF INDIA",
-    "MARUTI": "MARUTI SUZUKI",
-}
-
 # Source B item -> code mapping for reliable API queries.
 SRCB_CODES = {
-    "RELIANCE": "500325",
-    "TCS": "532540",
-    "HDFC": "500180",
-    "ICICI": "532174",
-    "INFY": "500209",
-    "LT": "500510",
-    "ITC": "500875",
-    "SBIN": "500112",
-    "MARUTI": "532500",
-    "TECHM": "532755",
-    "WIPRO": "507685",
-    "AXIS": "532215",
-    "HCL": "532281",
+    "APARAJYA": "519061",
+    "ORTIN": "516283",
+    "VIRENDOCT": "522066",
+    "KPTL": "500237",
+    "ZEEMEDIA": "505486",
+    "SUNDARMFIN": "532479",
+    "DIVGITECH": "532528",
 }
 
 
@@ -180,19 +146,108 @@ class DataFetcher:
 
         return {"link": "", "source": ""}
 
+    def _search_srca_dynamic(self, query: str) -> List[Dict[str, str]]:
+        """Search source A symbols dynamically using its search API."""
+        self._prepare_srca_session()
+        url = f"https://www.{SRCA_HOST}/api/search/autocomplete"
+        resp = self.session.get(url, params={"q": query}, timeout=20)
+        resp.raise_for_status()
+        payload = resp.json()
+
+        rows = []
+        if isinstance(payload, dict):
+            for key in ("symbols", "data", "results"):
+                value = payload.get(key)
+                if isinstance(value, list):
+                    rows = value
+                    break
+        elif isinstance(payload, list):
+            rows = payload
+
+        out: List[Dict[str, str]] = []
+        q = query.casefold()
+        for item in rows:
+            if not isinstance(item, dict):
+                continue
+            symbol = str(item.get("symbol") or item.get("identifier") or "").upper().strip()
+            name = str(
+                item.get("symbol_info")
+                or item.get("name")
+                or item.get("meta")
+                or item.get("description")
+                or symbol
+            ).strip()
+            if not symbol:
+                continue
+            hay = f"{symbol} {name}".casefold()
+            if q and q not in hay:
+                continue
+            out.append({"symbol": symbol, "name": name, "source": "SRCA"})
+
+        return out
+
+    def _search_srcb_dynamic(self, query: str) -> List[Dict[str, str]]:
+        """Best-effort source B search with API attempt and symbol-map fallback."""
+        out: List[Dict[str, str]] = []
+        q = query.casefold()
+
+        endpoints = [
+            ("SmartSearchData/w", {"text": query}),
+            ("SmartSearchNew/w", {"text": query}),
+        ]
+        for endpoint, params in endpoints:
+            try:
+                payload = self._get_srcb_json(endpoint, params)
+                rows = payload if isinstance(payload, list) else payload.get("Table", []) if isinstance(payload, dict) else []
+                for item in rows:
+                    if not isinstance(item, dict):
+                        continue
+                    symbol = str(item.get("symbol") or item.get("SYMBOL") or item.get("sSymbol") or "").upper().strip()
+                    name = str(
+                        item.get("name")
+                        or item.get("scripname")
+                        or item.get("SCRIPNAME")
+                        or item.get("longname")
+                        or symbol
+                    ).strip()
+                    if not symbol:
+                        continue
+                    hay = f"{symbol} {name}".casefold()
+                    if q and q not in hay:
+                        continue
+                    out.append({"symbol": symbol, "name": name, "source": "SRCB"})
+                if out:
+                    break
+            except Exception:
+                continue
+
+        if not out:
+            for symbol in SRCB_CODES:
+                if q in symbol.casefold():
+                    out.append({"symbol": symbol, "name": symbol, "source": "SRCB"})
+
+        return out
+
     def search_entity(self, query: str, source: str = "SRCA") -> List[Dict[str, str]]:
         """
         Search for entities by name or tag.
         """
-        query_lower = query.lower()
-        items = SRCA_ITEMS if source.upper() == "SRCA" else SRCB_ITEMS
-        results = []
+        src = source.upper()
+        try:
+            results = self._search_srca_dynamic(query) if src == "SRCA" else self._search_srcb_dynamic(query)
+        except Exception as e:
+            logger.warning(f"Dynamic search failed for {src} query '{query}': {e}")
+            results = []
 
-        for symbol, name in items.items():
-            if (query_lower in symbol.lower() or query_lower in name.lower()):
-                results.append({"symbol": symbol, "name": name, "source": source.upper()})
-
-        return results
+        seen = set()
+        unique = []
+        for item in results:
+            key = (item["symbol"], item["source"])
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(item)
+        return unique[:30]
 
     def search_all_sources(self, query: str) -> List[Dict[str, str]]:
         """
@@ -424,13 +479,20 @@ class DataFetcher:
 
     def validate_tag(self, symbol: str, source: str = "SRCA") -> bool:
         """Check if tag exists in the source."""
-        items = SRCA_ITEMS if source.upper() == "SRCA" else SRCB_ITEMS
-        return symbol.upper() in items
+        sym = symbol.upper()
+        if source.upper() == "SRCB" and sym in SRCB_CODES:
+            return True
+        results = self.search_entity(sym, source)
+        return any(item.get("symbol", "").upper() == sym for item in results)
 
     def get_entity_name(self, symbol: str, source: str = "SRCA") -> Optional[str]:
         """Get entity name for a tag."""
-        items = SRCA_ITEMS if source.upper() == "SRCA" else SRCB_ITEMS
-        return items.get(symbol.upper())
+        sym = symbol.upper()
+        results = self.search_entity(sym, source)
+        for item in results:
+            if item.get("symbol", "").upper() == sym:
+                return item.get("name") or sym
+        return sym if (source.upper() == "SRCB" and sym in SRCB_CODES) else None
 
     def get_latest_records(
         self,
