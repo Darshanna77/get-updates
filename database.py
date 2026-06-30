@@ -88,6 +88,17 @@ class Database:
                 """
             )
 
+            # Daily summary tracking – stores last date daily summary was sent
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS daily_summary (
+                    id INTEGER PRIMARY KEY,
+                    last_sent_date TEXT,
+                    sent_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+
             cursor.close()
             print(f"Database initialized at {self.db_path}")
 
@@ -116,6 +127,28 @@ class Database:
                 VALUES ('last_update_id', ?)
                 """,
                 (str(update_id),),
+            )
+            cursor.close()
+
+    def get_last_daily_summary_date(self) -> str:
+        """Return the date (YYYY-MM-DD) of the last daily summary sent."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT last_sent_date FROM daily_summary WHERE id = 1")
+            result = cursor.fetchone()
+            cursor.close()
+            return result[0] if result else None
+
+    def set_last_daily_summary_date(self, date_str: str):
+        """Persist the date when daily summary was last sent (YYYY-MM-DD format)."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO daily_summary (id, last_sent_date, sent_timestamp)
+                VALUES (1, ?, CURRENT_TIMESTAMP)
+                """,
+                (date_str,),
             )
             cursor.close()
 

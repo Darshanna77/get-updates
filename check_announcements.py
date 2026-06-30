@@ -453,8 +453,7 @@ async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
                         f"Summary: {summary}\n"
                         f"Published Date: {ann.get('published_date', ann.get('date', 'N/A'))}\n"
                         f"Release Link: {release_link}\n"
-                        f"Download Copy: {(f'({src}) ' + download_link) if download_link else 'Not available'}\n"
-                        f"Exchange Page: {exchange_fallback_link(symbol, exchange)}"
+                        f"Download Copy: {(f'({src}) ' + download_link) if download_link else 'Not available'}"
                     , parse_mode=None)
         except Exception as e:
             logger.error(f"Announcements error for {symbol}: {e}")
@@ -482,8 +481,7 @@ async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
                         f"Date: {action.get('date', 'N/A')}\n"
                         f"Summary: {action.get('title', 'N/A')}\n"
                         f"Type: {action.get('type', 'N/A')}\n"
-                        f"Download Copy: {(f'({src}) ' + link) if link else 'Not available'}\n"
-                        f"Exchange Page: {exchange_fallback_link(symbol, exchange)}"
+                        f"Download Copy: {(f'({src}) ' + link) if link else 'Not available'}"
                     , parse_mode=None)
         except Exception as e:
             logger.error(f"Corporate actions error for {symbol}: {e}")
@@ -516,21 +514,21 @@ async def main():
     # 2. Check for new announcements
     ann_count, act_count, total = await run_announcement_check(bot, db, fetcher)
 
-    # Current monitored symbols for clarity
-    monitored = db.get_watchlist()
-    monitored_list = ", ".join(
-        [f"{x['symbol']}({x['exchange']})" for x in monitored]
-    ) or "None"
-
-    # 3. Send summary
-    await send_to_all_chats(bot,
-        f"✅ *Check completed* – {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-        f"📊 Companies checked: {total}\n"
-        f"📋 Monitored: {monitored_list}\n"
-        f"📢 New announcements: {ann_count}\n"
-        f"💼 New corporate actions: {act_count}\n\n"
-        f"_Send /help for available commands\\._"
-    )
+    # 3. Send daily summary once per day (only if new day)
+    today = datetime.now().strftime("%Y-%m-%d")
+    last_summary_date = db.get_last_daily_summary_date()
+    if last_summary_date != today:
+        # Current monitored symbols for clarity
+        monitored = db.get_watchlist()
+        monitored_list = ", ".join(
+            [f"{x['symbol']}({x['exchange']})" for x in monitored]
+        ) or "None"
+        await send_to_all_chats(bot,
+            f"📋 *Daily Watchlist Summary*\n\n"
+            f"Monitored Companies ({total}): {monitored_list}\n\n"
+            f"_Bot polling every 5 minutes. New alerts will appear here._ "
+        )
+        db.set_last_daily_summary_date(today)
 
 
 if __name__ == "__main__":
