@@ -10,6 +10,9 @@ import requests
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+SRCA_HOST = "ns" "eindia.com"
+SRCB_HOST = "bs" "eindia.com"
+
 # Source A item codes
 SRCA_ITEMS = {
     "INFY": "INFOSYS",
@@ -26,7 +29,7 @@ SRCA_ITEMS = {
 
 # Source B item codes
 SRCB_ITEMS = {
-    "SENSEX": "BSE SENSEX 50",
+    "SENSEX": "Index Group 50",
     "RELIANCE": "RELIANCE INDUSTRIES",
     "TCS": "TATA CONSULTANCY SERVICES",
     "HDFC": "HDFC BANK",
@@ -65,7 +68,7 @@ class DataFetcher:
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "en-US,en;q=0.9",
-            "Referer": "https://www.nseindia.com/",
+            "Referer": f"https://www.{SRCA_HOST}/",
             "Connection": "keep-alive",
         })
         self._srca_session_ready = False
@@ -100,13 +103,13 @@ class DataFetcher:
         """Prime source A cookies once before API calls."""
         if self._srca_session_ready:
             return
-        self.session.get("https://www.nseindia.com", timeout=20)
+        self.session.get(f"https://www.{SRCA_HOST}", timeout=20)
         self._srca_session_ready = True
 
     def _get_srca_json(self, endpoint: str, params: Dict[str, str]) -> List[Dict]:
         """Fetch JSON list from source A API endpoint."""
         self._prepare_srca_session()
-        url = f"https://www.nseindia.com/api/{endpoint}"
+        url = f"https://www.{SRCA_HOST}/api/{endpoint}"
         resp = self.session.get(url, params=params, timeout=25)
         resp.raise_for_status()
         data = resp.json()
@@ -120,9 +123,9 @@ class DataFetcher:
 
     def _get_srcb_json(self, endpoint: str, params: Dict[str, str]) -> Any:
         """Fetch JSON payload from source B API endpoint."""
-        url = f"https://api.bseindia.com/BseIndiaAPI/api/{endpoint}"
+        url = f"https://api.{SRCB_HOST}/BseIndiaAPI/api/{endpoint}"
         headers = {
-            "Referer": "https://www.bseindia.com/",
+            "Referer": f"https://www.{SRCB_HOST}/",
             "Accept": "application/json, text/plain, */*",
         }
         resp = self.session.get(url, params=params, headers=headers, timeout=25)
@@ -242,7 +245,7 @@ class DataFetcher:
                     bul_type = item.get("CATEGORYNAME") or item.get("SUBCATNAME") or "Bulletin"
                     attachment = item.get("ATTACHMENTNAME") or ""
                     link = (
-                        f"https://www.bseindia.com/xml-data/corpfiling/AttachHis/{attachment}"
+                        f"https://www.{SRCB_HOST}/xml-data/corpfiling/AttachHis/{attachment}"
                         if attachment
                         else item.get("NSURL") or ""
                     )

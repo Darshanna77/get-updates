@@ -1,13 +1,13 @@
-# NSE/BSE Polling Interval Analysis
+# SRCA/SRCB Polling Interval Analysis
 
 ## Current Configuration
 Your bot polls every **5 minutes** (300 seconds). Let's analyze if this is optimal.
 
 ---
 
-## 1. NSE/BSE Market Hours & Announcement Patterns
+## 1. SRCA/SRCB Market Hours & Announcement Patterns
 
-### NSE Trading Hours
+### SRCA Trading Hours
 - **Regular Hours**: 09:15 AM - 03:30 PM IST (Monday - Friday)
 - **After Hours**: 03:40 PM - 04:00 PM IST (settlement)
 - **Weekends & Holidays**: Markets closed
@@ -44,7 +44,7 @@ Your bot polls every **5 minutes** (300 seconds). Let's analyze if this is optim
 - Unnecessary polling during market closed hours
 - Higher GitHub Actions usage
 - Overkill for long-term investors
-- May hit rate limits on NSE/BSE servers
+- May hit rate limits on SRCA/SRCB servers
 
 **Best For:** Active traders, options traders, swing traders
 
@@ -61,7 +61,7 @@ Your bot polls every **5 minutes** (300 seconds). Let's analyze if this is optim
 - Within GitHub free tier (10,000 runs/month easily)
 - Catches announcements same day
 - Reasonable alert latency for most use cases
-- Lower server load on NSE/BSE
+- Lower server load on SRCA/SRCB
 
 **Cons:**
 - May miss announcements for <15 min windows
@@ -127,21 +127,21 @@ Weekends & Holidays:
 
 ---
 
-## 3. NSE/BSE Data Update Delays
+## 3. SRCA/SRCB Data Update Delays
 
-**Important**: Both NSE and BSE may have their own delays:
+**Important**: Both SRCA and SRCB may have their own delays:
 
-### NSE Data Delays
+### SRCA Data Delays
 - **Announcements**: Usually updated within 1-2 minutes of posting
 - **Corporate Actions**: Updated immediately after approval
 - **API Response Time**: 2-5 seconds typical
 
-### BSE Data Delays
+### SRCB Data Delays
 - **Announcements**: 1-3 minutes delay
 - **Corporate Actions**: 2-5 minutes delay
 - **Website Updates**: 3-10 minutes behind real-time
 
-**Key Insight**: Polling too frequently (every 5 sec) won't help because NSE/BSE themselves have 1-2 minute delays!
+**Key Insight**: Polling too frequently (every 5 sec) won't help because SRCA/SRCB themselves have 1-2 minute delays!
 
 ---
 
@@ -164,9 +164,9 @@ Weekends & Holidays:
 
 ## 5. Network & Server Load Considerations
 
-### NSE/BSE Rate Limits
-- NSE website: No official API, estimates ~100-200 req/min from single IP
-- BSE website: ~50-100 req/min limit
+### SRCA/SRCB Rate Limits
+- SRCA website: No official API, estimates ~100-200 req/min from single IP
+- SRCB website: ~50-100 req/min limit
 - **Your bot**: 1 request/5min = 12/hour = well within limits
 
 ### Bot Load Impact
@@ -183,7 +183,7 @@ Weekends & Holidays:
 
 **Reasoning:**
 1. **Announcement Timing**: Most significant announcements stay relevant for >15 minutes
-2. **Delay Tolerance**: NSE/BSE have 1-2 min internal delays anyway
+2. **Delay Tolerance**: SRCA/SRCB have 1-2 min internal delays anyway
 3. **Efficiency**: 96 checks/day vs 288 with 5-min = 3x more efficient
 4. **User Experience**: Still get same-day alerts for announcements
 5. **Resource Balance**: Perfect balance for personal use
@@ -217,7 +217,7 @@ schedule:
 ### Example: Dividend Announcement
 ```
 Announcement Posted at: 2:45 PM IST
-NSE Website Updated: 2:46 PM IST
+SRCA Website Updated: 2:46 PM IST
 Your Bot Checks:
   - 5 min interval: Alerted by 2:50 PM (4 min delay) ✓
   - 15 min interval: Alerted by 2:55 PM (9 min delay) ✓
@@ -257,7 +257,7 @@ schedule:
 
 **Why 15 minutes?**
 1. ✅ Catches all important announcements
-2. ✅ NSE/BSE data is fresh enough
+2. ✅ SRCA/SRCB data is fresh enough
 3. ✅ Only 2.4% of free tier used
 4. ✅ Still gives alerts within 15 minutes
 5. ✅ Respects server resources

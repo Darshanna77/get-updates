@@ -1,6 +1,6 @@
-# NSE & BSE Bot - Complete Deployment Guide
+# SRCA & SRCB Bot - Complete Deployment Guide
 
-This guide will walk you through setting up the NSE & BSE Corporate Announcements Monitor bot, step by step.
+This guide will walk you through setting up the SRCA & SRCB Corporate Announcements Monitor bot, step by step.
 
 ## Prerequisites Checklist
 
@@ -19,7 +19,7 @@ This guide will walk you through setting up the NSE & BSE Corporate Announcement
 2. Send message `/start`
 3. Send message `/newbot`
 4. Follow the prompts:
-   - Choose a name (e.g., "NSE & BSE Announcements Monitor")
+   - Choose a name (e.g., "SRCA & SRCB Announcements Monitor")
    - Choose a username (e.g., "nse_bse_bot")
 5. BotFather will send you a token like: `123456789:ABCDEFGHIjklmnopQRSTUvwxyz`
 6. **Save this token** - you'll need it
@@ -48,8 +48,8 @@ You can send alerts to one or multiple Telegram chat IDs!
 
 1. Go to https://github.com/new
 2. Fill in details:
-   - Repository name: `nse-bse-bot` (or any name)
-   - Description: "Personal NSE & BSE Corporate Announcements Monitor"
+   - Repository name: `pulse-monitor` (or any name)
+   - Description: "Personal SRCA & SRCB Corporate Announcements Monitor"
    - **Select "Private"**
    - Initialize with README
 3. Click "Create repository"
@@ -57,8 +57,8 @@ You can send alerts to one or multiple Telegram chat IDs!
 ### 2.2 Clone Repository Locally
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/nse-bot.git
-cd nse-bot
+git clone https://github.com/YOUR_USERNAME/pulse-monitor.git
+cd pulse-monitor
 ```
 
 ---
@@ -143,7 +143,7 @@ Press `Ctrl+C` to stop the bot.
 git add .
 
 # Commit
-git commit -m "Initial NSE bot setup"
+git commit -m "Initial SRCA bot setup"
 
 # Push to GitHub
 git push origin main
@@ -193,7 +193,7 @@ Click "New repository secret" for each:
 ### 7.2 Manually Trigger First Run
 
 1. Click "Actions" tab
-2. Click "NSE Bot - Poll Announcements" workflow (left sidebar)
+2. Click "SRCA Bot - Poll Announcements" workflow (left sidebar)
 3. Click "Run workflow" → "Run workflow" (blue button)
 4. Watch it run (should complete in ~30 seconds)
 5. Check Telegram for confirmation message
@@ -204,7 +204,7 @@ Click "New repository secret" for each:
 
 Your bot is now live and will:
 - ✅ Run automatically every 5 minutes
-- ✅ Monitor your watchlist for new announcements
+- ✅ Monitor your registry for new announcements
 - ✅ Send you Telegram alerts
 - ✅ Store processed announcements to avoid duplicates
 
@@ -212,18 +212,18 @@ Your bot is now live and will:
 
 1. **Open Telegram** and find your bot (search the username you created)
 
-2. **Add Companies to Watchlist:**
+2. **Add Companies to Registry:**
    ```
    /search Infosys
    /add
-   [Select from list - shows exchange (NSE/BSE)]
+   [Select from list - shows exchange (SRCA/SRCB)]
    ```
 
-3. **View Your Watchlist:**
+3. **View Your Registry:**
    ```
    /list
    ```
-   Shows all companies with their exchange (NSE or BSE)
+   Shows all companies with their exchange (SRCA or SRCB)
 
 4. **Remove Companies:**
    ```
@@ -244,11 +244,11 @@ Your bot is now live and will:
 
 1. Check if you're messaging the correct bot
 2. Verify `TELEGRAM_BOT_TOKEN` is correct in GitHub Secrets
-3. Manually trigger workflow: Actions → "NSE Bot - Poll Announcements" → "Run workflow"
+3. Manually trigger workflow: Actions → "SRCA Bot - Poll Announcements" → "Run workflow"
 
 ### No Announcements Received
 
-1. Check your watchlist: `/list`
+1. Check your registry: `/list`
 2. Add companies: `/search` then `/add`
 3. Manually trigger check: `/check`
 
@@ -280,12 +280,12 @@ Go to "Actions" tab in GitHub to:
 
 ---
 
-## Modifying NSE & BSE Companies
+## Modifying SRCA & SRCB Companies
 
-The bot currently has a limited list of NSE and BSE companies. To add more:
+The bot currently has a limited list of SRCA and SRCB companies. To add more:
 
 1. Edit `nse_fetcher.py`
-2. Add NSE companies to `NSE_SYMBOLS` dictionary:
+2. Add SRCA companies to `NSE_SYMBOLS` dictionary:
    ```python
    NSE_SYMBOLS = {
        "INFY": "INFOSYS",
@@ -294,10 +294,10 @@ The bot currently has a limited list of NSE and BSE companies. To add more:
        "SBIN": "STATE BANK OF INDIA",
    }
    ```
-3. Add BSE companies to `BSE_SYMBOLS` dictionary:
+3. Add SRCB companies to `BSE_SYMBOLS` dictionary:
    ```python
    BSE_SYMBOLS = {
-       "SENSEX": "BSE SENSEX 50",
+       "SENSEX": "SRCB SENSEX 50",
        "RELIANCE": "RELIANCE INDUSTRIES",
        # Add more like this:
        "ITC": "ITC LIMITED",
@@ -329,7 +329,7 @@ For issues:
 ## Next Steps (Optional Enhancements)
 
 - Set up notifications for specific announcement types
-- Add more NSE companies to watchlist
-- Export watchlist data
+- Add more SRCA companies to registry
+- Export registry data
 - Add announcement filtering
 - Create backup of database

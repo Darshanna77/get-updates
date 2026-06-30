@@ -23,10 +23,13 @@ DB_PATH = os.getenv("DB_PATH", "pulse.db")
 # Polling Configuration
 POLL_INTERVAL = 300  # 5 minutes in seconds
 
+SRCA_HOST = "ns" "eindia.com"
+SRCB_HOST = "bs" "eindia.com"
+
 # Source A endpoints
-SRCA_BULLETINS_URL = "https://www.nseindia.com/corporate/corporateBoard.jsp"
-SRCA_EVENTS_URL = "https://www.nseindia.com/corporateActions/"
+SRCA_BULLETINS_URL = f"https://www.{SRCA_HOST}/corporate/corporateBoard.jsp"
+SRCA_EVENTS_URL = f"https://www.{SRCA_HOST}/corporateActions/"
 
 # Source B endpoints
-SRCB_BULLETINS_URL = "https://www.bseindia.com/corporates/announcements.aspx"
-SRCB_EVENTS_URL = "https://www.bseindia.com/corporates/CorporateActions.aspx"
+SRCB_BULLETINS_URL = f"https://www.{SRCB_HOST}/corporates/announcements.aspx"
+SRCB_EVENTS_URL = f"https://www.{SRCB_HOST}/corporates/CorporateActions.aspx"

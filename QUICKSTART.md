@@ -12,7 +12,7 @@ If you want to get started immediately without reading the full guide:
 ## 2. Create GitHub Repo (1 min)
 
 - Go to https://github.com/new
-- Name it `nse-bse-bot`
+- Name it `pulse-monitor`
 - **Check "Private"**
 - Create
 
@@ -27,8 +27,8 @@ If you want to get started immediately without reading the full guide:
 ## 4. Push Code (1 min)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/nse-bse-bot.git
-cd nse-bse-bot
+git clone https://github.com/YOUR_USERNAME/pulse-monitor.git
+cd pulse-monitor
 # Copy all project files here
 git add .
 git commit -m "Initial setup"
@@ -37,16 +37,16 @@ git push origin main
 
 ## 5. Test (manual trigger)
 
-- Actions tab → "NSE Bot - Poll Announcements"
+- Actions tab → "SRCA Bot - Poll Announcements"
 - Click "Run workflow"
 - Bot now active and will run every 5 minutes!
 
 ## Use in Telegram
 
 ```
-/search Infosys   # Find company (searches NSE & BSE)
-/add              # Add to watchlist (select - shows NSE or BSE)
-/list             # View watchlist (shows exchange for each)
+/search Infosys   # Find company (searches SRCA & SRCB)
+/add              # Add to registry (select - shows SRCA or SRCB)
+/list             # View registry (shows exchange for each)
 /check            # Manually check now
 ```
 

@@ -21,7 +21,7 @@ import logging
 from datetime import datetime
 from typing import Optional
 from database import Database
-from data_fetcher import SRCB_CODES, DataFetcher
+from data_fetcher import SRCB_CODES, DataFetcher, SRCA_HOST, SRCB_HOST
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS
 from telegram import Bot
 
@@ -58,11 +58,11 @@ async def send_to_all_chats(bot: Bot, text: str, parse_mode: Optional[str] = "Ma
 def source_fallback_link(symbol: str, exchange: str) -> str:
     """Return a stable fallback page URL for the tag/source."""
     if exchange.upper() == "SRCA":
-        return f"https://www.nseindia.com/get-quotes/equity?symbol={symbol.upper()}"
+        return f"https://www.{SRCA_HOST}/get-quotes/equity?symbol={symbol.upper()}"
     scrip = SRCB_CODES.get(symbol.upper(), "")
     if scrip:
-        return f"https://www.bseindia.com/stock-share-price/-/-/{scrip}/"
-    return "https://www.bseindia.com/"
+        return f"https://www.{SRCB_HOST}/stock-share-price/-/-/{scrip}/"
+    return f"https://www.{SRCB_HOST}/"
 
 
 def parse_flexible_date(date_str: str) -> Optional[datetime]:

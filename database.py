@@ -6,7 +6,7 @@ from config import DB_PATH
 
 
 class Database:
-    """SQLite database handler for NSE Bot."""
+    """SQLite database handler for Pulse Monitor."""
 
     def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path

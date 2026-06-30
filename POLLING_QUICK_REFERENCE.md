@@ -69,7 +69,7 @@ cron: '*/30 * * * *'
 
 | Fact | Impact |
 |------|--------|
-| NSE announces → Updated: **1-2 minutes** | Polling <1 min wastes resources |
+| SRCA announces → Updated: **1-2 minutes** | Polling <1 min wastes resources |
 | Market reacts: **5-15 minutes** | 15 min alert still useful |
 | GitHub free tier: **2,000 min/month** | Even 5 min = 7% usage |
 | Typical workflow: **30-60 seconds** | Very efficient |
@@ -144,7 +144,7 @@ All well within limits!
 
 **Start with 15 minutes** for these reasons:
 
-1. **NSE/BSE already have 1-2 minute delays** → Polling faster doesn't help
+1. **SRCA/SRCB already have 1-2 minute delays** → Polling faster doesn't help
 2. **Alert gets to you within 15 minutes** → Still fresh/actionable
 3. **3x more efficient than 5 minutes** → Use fewer resources
 4. **Still catches 99% of important announcements** → No practical loss
@@ -193,7 +193,7 @@ git push origin main
 ## Testing Your New Interval
 
 1. Go to GitHub → Actions tab
-2. Click "NSE Bot - Poll Announcements" workflow
+2. Click "SRCA Bot - Poll Announcements" workflow
 3. Click "Run workflow"
 4. Check next run is scheduled 15 minutes from last run
 5. Verify in workflow logs
@@ -202,7 +202,7 @@ git push origin main
 
 ## Questions?
 
-- **Is 15 minutes too long?** No, NSE has 1-2 min delays anyway
+- **Is 15 minutes too long?** No, SRCA has 1-2 min delays anyway
 - **Will I miss announcements?** No, most stay active for hours
 - **Is 5 minutes better?** Only if you're actively trading
 - **Can I use 1 minute?** GitHub doesn't allow <5 min for free
