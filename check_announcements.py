@@ -184,7 +184,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
 
         # /list (/view, /veiw aliases) ───────────────────────────────────
         elif cmd in ("/list", "/view", "/veiw"):
-            watchlist = db.get_watchlist()
+            watchlist = db.get_watchlist(chat_id)
             if not watchlist:
                 await reply(bot, chat_id,
                     "📋 Your watchlist is empty\\.\n"
@@ -216,7 +216,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                 else:
                     lines = []
                     for r in results:
-                        tick = "✓ " if db.is_in_watchlist(r["symbol"], r["exchange"]) else ""
+                        tick = "✓ " if db.is_in_watchlist(chat_id, r["symbol"], r["exchange"]) else ""
                         lines.append(
                             f"{tick}`{r['symbol']}` \\({r['exchange']}\\) – {r['name']}"
                         )
@@ -359,7 +359,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                     )
                 else:
                     company_name = fetcher.get_company_name(symbol, exchange) or symbol
-                    added = db.add_to_watchlist(symbol, company_name, exchange)
+                    added = db.add_to_watchlist(chat_id, symbol, company_name, exchange)
                     if added:
                         await reply(bot, chat_id,
                             f"✅ Added *{symbol}* \\({exchange}\\) – {company_name} to watchlist\\!"
@@ -372,7 +372,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
         # /remove ─────────────────────────────────────────────────────────
         elif cmd == "/remove":
             if len(parts) < 2:
-                watchlist = db.get_watchlist()
+                watchlist = db.get_watchlist(chat_id)
                 if not watchlist:
                     await reply(bot, chat_id, "Your watchlist is empty\\.")
                 else:
@@ -388,7 +388,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
             else:
                 symbol   = parts[1].upper()
                 exchange = parts[2].upper() if len(parts) >= 3 else "NSE"
-                removed  = db.remove_from_watchlist(symbol, exchange)
+                removed  = db.remove_from_watchlist(chat_id, symbol, exchange)
                 if removed:
                     await reply(bot, chat_id,
                         f"✅ Removed *{symbol}* \\({exchange}\\) from watchlist\\."
@@ -400,10 +400,10 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
 
         # /status ─────────────────────────────────────────────────────────
         elif cmd == "/status":
-            watchlist = db.get_watchlist()
+            watchlist = db.get_watchlist(chat_id)
             await reply(bot, chat_id,
                 f"📊 *Bot Status*\n\n"
-                f"📋 Watchlist: {len(watchlist)} companies\n"
+                f"📋 Your Watchlist: {len(watchlist)} companies\n"
                 f"🔄 Poll interval: every 5 minutes\n"
                 f"✅ Running via GitHub Actions"
             )
@@ -423,76 +423,85 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
 # ---------------------------------------------------------------------------
 
 async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
-    """Check NSE/BSE for each watchlisted company and send alerts."""
-    watchlist = db.get_watchlist()
-    logger.info(f"Checking {len(watchlist)} companies...")
+    """Check NSE/BSE for each watchlisted company and send alerts per chat."""
+    # Get all unique chat IDs that have watchlist entries
+    chat_ids = db.get_all_chat_ids()
+    if not chat_ids:
+        logger.info("No chats with watchlist entries found.")
+        return 0, 0, 0
 
-    ann_count = 0
-    act_count = 0
+    total_ann_count = 0
+    total_act_count = 0
+    total_companies = 0
 
-    for company in watchlist:
-        symbol   = company["symbol"]
-        exchange = company["exchange"]
-        logger.info(f"  → {symbol} ({exchange})")
+    for chat_id in chat_ids:
+        watchlist = db.get_watchlist(chat_id)
+        logger.info(f"Checking {len(watchlist)} companies for chat_id {chat_id}...")
+        total_companies += len(watchlist)
 
-        try:
-            for ann in fetcher.get_announcements(symbol, exchange)[:4]:
-                if db.mark_announcement_processed(
-                    symbol, exchange,
-                    ann.get("id", ""), ann.get("title", ""), ann.get("date", ""),
-                ):
-                    ann_count += 1
-                    resolved = fetcher.resolve_statement_link(
-                        symbol,
-                        exchange,
-                        ann.get("link", ""),
-                    )
-                    src = resolved.get("source", exchange)
-                    download_link = resolved.get("link", "")
-                    release_link = ann.get("release_link") or exchange_fallback_link(symbol, exchange)
-                    summary = ann.get("description") or ann.get("title", "N/A")
-                    await send_to_all_chats(bot,
-                        f"📢 New Announcement for {company['name']} ({symbol})\n"
-                        f"Exchange: {exchange}\n\n"
-                        f"Type of Information: {ann.get('type', 'Announcement')}\n"
-                        f"Information Date: {ann.get('date', 'N/A')}\n"
-                        f"Summary: {summary}\n"
-                        f"Published Date: {ann.get('published_date', ann.get('date', 'N/A'))}\n"
-                        f"Release Link: {release_link}\n"
-                        f"Download Copy: {(f'({src}) ' + download_link) if download_link else 'Not available'}"
-                    , parse_mode=None)
-        except Exception as e:
-            logger.error(f"Announcements error for {symbol}: {e}")
+        for company in watchlist:
+            symbol   = company["symbol"]
+            exchange = company["exchange"]
+            logger.info(f"  → {symbol} ({exchange})")
 
-        try:
-            for action in fetcher.get_corporate_actions(symbol, exchange)[:4]:
-                if db.mark_corporate_action_processed(
-                    symbol, exchange,
-                    action.get("id", ""), action.get("type", ""),
-                    action.get("title", ""), action.get("date", ""),
-                ):
-                    act_count += 1
-                    resolved = fetcher.resolve_statement_link(
-                        symbol,
-                        exchange,
-                        action.get("link", ""),
-                    )
-                    src = resolved.get("source", exchange)
-                    link = resolved.get("link", "")
-                    group_name = "Meetings/Discussions" if classify_action_group(action) == "meeting" else "Price/Capital Related"
-                    await send_to_all_chats(bot,
-                        f"💼 New Corporate Action for {company['name']} ({symbol})\n"
-                        f"Exchange: {exchange}\n\n"
-                        f"Category Group: {group_name}\n"
-                        f"Date: {action.get('date', 'N/A')}\n"
-                        f"Summary: {action.get('title', 'N/A')}\n"
-                        f"Type: {action.get('type', 'N/A')}\n"
-                        f"Download Copy: {(f'({src}) ' + link) if link else 'Not available'}"
-                    , parse_mode=None)
-        except Exception as e:
-            logger.error(f"Corporate actions error for {symbol}: {e}")
+            try:
+                for ann in fetcher.get_announcements(symbol, exchange)[:4]:
+                    if db.mark_announcement_processed(
+                        symbol, exchange,
+                        ann.get("id", ""), ann.get("title", ""), ann.get("date", ""),
+                    ):
+                        total_ann_count += 1
+                        resolved = fetcher.resolve_statement_link(
+                            symbol,
+                            exchange,
+                            ann.get("link", ""),
+                        )
+                        src = resolved.get("source", exchange)
+                        download_link = resolved.get("link", "")
+                        release_link = ann.get("release_link") or exchange_fallback_link(symbol, exchange)
+                        summary = ann.get("description") or ann.get("title", "N/A")
+                        await reply(bot, chat_id,
+                            f"📢 New Announcement for {company['name']} ({symbol})\n"
+                            f"Exchange: {exchange}\n\n"
+                            f"Type of Information: {ann.get('type', 'Announcement')}\n"
+                            f"Information Date: {ann.get('date', 'N/A')}\n"
+                            f"Summary: {summary}\n"
+                            f"Published Date: {ann.get('published_date', ann.get('date', 'N/A'))}\n"
+                            f"Release Link: {release_link}\n"
+                            f"Download Copy: {(f'({src}) ' + download_link) if download_link else 'Not available'}"
+                        , parse_mode=None)
+            except Exception as e:
+                logger.error(f"Announcements error for {symbol}: {e}")
 
-    return ann_count, act_count, len(watchlist)
+            try:
+                for action in fetcher.get_corporate_actions(symbol, exchange)[:4]:
+                    if db.mark_corporate_action_processed(
+                        symbol, exchange,
+                        action.get("id", ""), action.get("type", ""),
+                        action.get("title", ""), action.get("date", ""),
+                    ):
+                        total_act_count += 1
+                        resolved = fetcher.resolve_statement_link(
+                            symbol,
+                            exchange,
+                            action.get("link", ""),
+                        )
+                        src = resolved.get("source", exchange)
+                        link = resolved.get("link", "")
+                        group_name = "Meetings/Discussions" if classify_action_group(action) == "meeting" else "Price/Capital Related"
+                        await reply(bot, chat_id,
+                            f"💼 New Corporate Action for {company['name']} ({symbol})\n"
+                            f"Exchange: {exchange}\n\n"
+                            f"Category Group: {group_name}\n"
+                            f"Date: {action.get('date', 'N/A')}\n"
+                            f"Summary: {action.get('title', 'N/A')}\n"
+                            f"Type: {action.get('type', 'N/A')}\n"
+                            f"Download Copy: {(f'({src}) ' + link) if link else 'Not available'}"
+                        , parse_mode=None)
+            except Exception as e:
+                logger.error(f"Corporate actions error for {symbol}: {e}")
+
+    return total_ann_count, total_act_count, total_companies
 
 
 # ---------------------------------------------------------------------------
@@ -524,16 +533,18 @@ async def main():
     today = datetime.now().strftime("%Y-%m-%d")
     last_summary_date = db.get_last_daily_summary_date()
     if last_summary_date != today:
-        # Current monitored symbols for clarity
-        monitored = db.get_watchlist()
-        monitored_list = ", ".join(
-            [f"{x['symbol']}({x['exchange']})" for x in monitored]
-        ) or "None"
-        await send_to_all_chats(bot,
-            f"📋 *Daily Watchlist Summary*\n\n"
-            f"Monitored Companies ({total}): {monitored_list}\n\n"
-            f"_Bot polling every 5 minutes. New alerts will appear here._ "
-        )
+        # Send per-chat daily summary
+        chat_ids = db.get_all_chat_ids()
+        for chat_id in chat_ids:
+            monitored = db.get_watchlist(chat_id)
+            monitored_list = ", ".join(
+                [f"{x['symbol']}({x['exchange']})" for x in monitored]
+            ) or "None"
+            await reply(bot, chat_id,
+                f"📋 *Daily Watchlist Summary*\n\n"
+                f"Your Monitored Companies ({len(monitored)}): {monitored_list}\n\n"
+                f"_Bot polling every 5 minutes. New alerts will appear here._ "
+            )
         db.set_last_daily_summary_date(today)
 
 

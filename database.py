@@ -31,16 +31,17 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
 
-            # Watchlist table - stores companies to monitor
+            # Watchlist table - stores companies to monitor per chat_id
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS watchlist (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chat_id INTEGER NOT NULL,
                     symbol TEXT NOT NULL,
                     company_name TEXT NOT NULL,
                     exchange TEXT NOT NULL,
                     added_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(symbol, exchange)
+                    UNIQUE(chat_id, symbol, exchange)
                 )
                 """
             )
@@ -152,50 +153,50 @@ class Database:
             )
             cursor.close()
 
-    def add_to_watchlist(self, symbol: str, company_name: str, exchange: str = "NSE") -> bool:
-        """Add company to watchlist."""
+    def add_to_watchlist(self, chat_id: int, symbol: str, company_name: str, exchange: str = "NSE") -> bool:
+        """Add company to watchlist for a specific chat."""
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    INSERT INTO watchlist (symbol, company_name, exchange)
-                    VALUES (?, ?, ?)
+                    INSERT INTO watchlist (chat_id, symbol, company_name, exchange)
+                    VALUES (?, ?, ?, ?)
                     """,
-                    (symbol.upper(), company_name, exchange.upper()),
+                    (chat_id, symbol.upper(), company_name, exchange.upper()),
                 )
                 cursor.close()
                 return True
         except sqlite3.IntegrityError:
             return False
 
-    def remove_from_watchlist(self, symbol: str, exchange: str = "NSE") -> bool:
-        """Remove company from watchlist."""
+    def remove_from_watchlist(self, chat_id: int, symbol: str, exchange: str = "NSE") -> bool:
+        """Remove company from watchlist for a specific chat."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "DELETE FROM watchlist WHERE symbol = ? AND exchange = ?",
-                (symbol.upper(), exchange.upper()),
+                "DELETE FROM watchlist WHERE chat_id = ? AND symbol = ? AND exchange = ?",
+                (chat_id, symbol.upper(), exchange.upper()),
             )
             cursor.close()
             return cursor.rowcount > 0
 
-    def get_watchlist(self) -> list:
-        """Get all companies in watchlist."""
+    def get_watchlist(self, chat_id: int) -> list:
+        """Get all companies in watchlist for a specific chat."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT symbol, company_name, exchange FROM watchlist ORDER BY company_name")
+            cursor.execute("SELECT symbol, company_name, exchange FROM watchlist WHERE chat_id = ? ORDER BY company_name", (chat_id,))
             results = cursor.fetchall()
             cursor.close()
             return [{"symbol": row[0], "name": row[1], "exchange": row[2]} for row in results]
 
-    def is_in_watchlist(self, symbol: str, exchange: str = "NSE") -> bool:
-        """Check if symbol is in watchlist."""
+    def is_in_watchlist(self, chat_id: int, symbol: str, exchange: str = "NSE") -> bool:
+        """Check if symbol is in watchlist for a specific chat."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT 1 FROM watchlist WHERE symbol = ? AND exchange = ?",
-                (symbol.upper(), exchange.upper()),
+                "SELECT 1 FROM watchlist WHERE chat_id = ? AND symbol = ? AND exchange = ?",
+                (chat_id, symbol.upper(), exchange.upper()),
             )
             result = cursor.fetchone()
             cursor.close()
@@ -240,6 +241,15 @@ class Database:
                 return True
         except sqlite3.IntegrityError:
             return False
+
+    def get_all_chat_ids(self) -> list:
+        """Get all unique chat IDs that have watchlist entries."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT DISTINCT chat_id FROM watchlist")
+            results = cursor.fetchall()
+            cursor.close()
+            return [row[0] for row in results]
 
     def clear_old_processed_records(self, days: int = 30):
         """Clear processed records older than specified days."""
