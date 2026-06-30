@@ -148,6 +148,13 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
             continue
 
         chat_id = msg.chat_id
+        
+        # Security: Only process commands from authorized chat IDs
+        if chat_id not in TELEGRAM_CHAT_IDS:
+            logger.warning(f"⚠️ Unauthorized access attempt from chat_id: {chat_id}")
+            await reply(bot, chat_id, "❌ You are not authorized to use this bot.")
+            continue
+        
         text    = msg.text.strip()
         parts   = text.split()
         # Normalize Telegram command name so all commands are case-insensitive.
