@@ -1,4 +1,4 @@
-"""NSE and BSE data fetcher for corporate announcements and actions."""
+"""Data fetcher for bulletins and activities from external sources."""
 import hashlib
 import logging
 import time
@@ -10,8 +10,8 @@ import requests
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# NSE company symbols
-NSE_SYMBOLS = {
+# Source A item codes
+SRCA_ITEMS = {
     "INFY": "INFOSYS",
     "TCS": "TATA CONSULTANCY SERVICES",
     "WIPRO": "WIPRO",
@@ -24,8 +24,8 @@ NSE_SYMBOLS = {
     "AXIS": "AXIS BANK",
 }
 
-# BSE company symbols (SENSEX and MIDCAP components)
-BSE_SYMBOLS = {
+# Source B item codes
+SRCB_ITEMS = {
     "SENSEX": "BSE SENSEX 50",
     "RELIANCE": "RELIANCE INDUSTRIES",
     "TCS": "TATA CONSULTANCY SERVICES",
@@ -38,13 +38,12 @@ BSE_SYMBOLS = {
     "MARUTI": "MARUTI SUZUKI",
 }
 
-# BSE symbol -> scrip code mapping for reliable API queries.
-# These are stable exchange identifiers, independent of website UI.
-BSE_SCRIP_CODES = {
+# Source B item -> code mapping for reliable API queries.
+SRCB_CODES = {
     "RELIANCE": "500325",
     "TCS": "532540",
-    "HDFC": "500180",   # HDFC Bank
-    "ICICI": "532174",  # ICICI Bank
+    "HDFC": "500180",
+    "ICICI": "532174",
     "INFY": "500209",
     "LT": "500510",
     "ITC": "500875",
@@ -57,8 +56,8 @@ BSE_SCRIP_CODES = {
 }
 
 
-class StockFetcher:
-    """Fetch NSE and BSE corporate announcements and actions."""
+class DataFetcher:
+    """Fetch bulletins and activities from data sources."""
 
     def __init__(self):
         self.session = requests.Session()
@@ -69,7 +68,7 @@ class StockFetcher:
             "Referer": "https://www.nseindia.com/",
             "Connection": "keep-alive",
         })
-        self._nse_session_ready = False
+        self._srca_session_ready = False
 
     def _make_id(self, *parts: str) -> str:
         """Create a deterministic ID for de-duplication."""
@@ -97,16 +96,16 @@ class StockFetcher:
                 continue
         return datetime.min
 
-    def _prepare_nse_session(self):
-        """Prime NSE cookies once before API calls."""
-        if self._nse_session_ready:
+    def _prepare_srca_session(self):
+        """Prime source A cookies once before API calls."""
+        if self._srca_session_ready:
             return
         self.session.get("https://www.nseindia.com", timeout=20)
-        self._nse_session_ready = True
+        self._srca_session_ready = True
 
-    def _get_nse_json(self, endpoint: str, params: Dict[str, str]) -> List[Dict]:
-        """Fetch JSON list from NSE API endpoint."""
-        self._prepare_nse_session()
+    def _get_srca_json(self, endpoint: str, params: Dict[str, str]) -> List[Dict]:
+        """Fetch JSON list from source A API endpoint."""
+        self._prepare_srca_session()
         url = f"https://www.nseindia.com/api/{endpoint}"
         resp = self.session.get(url, params=params, timeout=25)
         resp.raise_for_status()
@@ -119,8 +118,8 @@ class StockFetcher:
             return []
         return []
 
-    def _get_bse_json(self, endpoint: str, params: Dict[str, str]) -> Any:
-        """Fetch JSON payload from BSE API endpoint."""
+    def _get_srcb_json(self, endpoint: str, params: Dict[str, str]) -> Any:
+        """Fetch JSON payload from source B API endpoint."""
         url = f"https://api.bseindia.com/BseIndiaAPI/api/{endpoint}"
         headers = {
             "Referer": "https://www.bseindia.com/",
@@ -130,9 +129,9 @@ class StockFetcher:
         resp.raise_for_status()
         return resp.json()
 
-    def _get_bse_scrip_code(self, symbol: str) -> Optional[str]:
-        """Resolve BSE scrip code from symbol."""
-        return BSE_SCRIP_CODES.get(symbol.upper())
+    def _get_srcb_code(self, symbol: str) -> Optional[str]:
+        """Resolve source B code from tag."""
+        return SRCB_CODES.get(symbol.upper())
 
     def _is_link_reachable(self, url: str, retries: int = 3) -> bool:
         """Check if a document URL is reachable with lightweight retries."""
@@ -153,59 +152,51 @@ class StockFetcher:
 
         return False
 
-    def resolve_statement_link(self, symbol: str, exchange: str, primary_link: str) -> Dict[str, str]:
+    def resolve_doc_link(self, symbol: str, exchange: str, primary_link: str) -> Dict[str, str]:
         """
-        Return best available statement link.
+        Return best available document link.
 
         Strategy:
         1) Retry primary link.
-        2) If still failing and exchange is NSE, fallback to latest reachable BSE announcement link.
+        2) If still failing and source is SRCA, fallback to latest reachable SRCB bulletin link.
         3) Else return empty link.
         """
         if primary_link and self._is_link_reachable(primary_link):
             return {"link": primary_link, "source": exchange.upper()}
 
-        if exchange.upper() == "NSE":
+        if exchange.upper() == "SRCA":
             try:
-                bse_items = self.get_announcements(symbol, "BSE")
-                for item in bse_items:
+                srcb_items = self.get_bulletins(symbol, "SRCB")
+                for item in srcb_items:
                     candidate = item.get("link") or ""
                     if candidate and self._is_link_reachable(candidate, retries=2):
-                        return {"link": candidate, "source": "BSE"}
+                        return {"link": candidate, "source": "SRCB"}
             except Exception as e:
-                logger.warning(f"BSE fallback lookup failed for {symbol}: {e}")
+                logger.warning(f"SRCB fallback lookup failed for {symbol}: {e}")
 
         return {"link": "", "source": ""}
 
-    def search_company(self, query: str, exchange: str = "NSE") -> List[Dict[str, str]]:
+    def search_entity(self, query: str, exchange: str = "SRCA") -> List[Dict[str, str]]:
         """
-        Search for companies by name or symbol.
-        
-        Args:
-            query: Search string
-            exchange: "NSE" or "BSE"
-        
-        Returns a list of matching companies with symbol, name and exchange.
+        Search for entities by name or tag.
         """
         query_lower = query.lower()
-        symbols = NSE_SYMBOLS if exchange.upper() == "NSE" else BSE_SYMBOLS
+        items = SRCA_ITEMS if exchange.upper() == "SRCA" else SRCB_ITEMS
         results = []
 
-        for symbol, name in symbols.items():
+        for symbol, name in items.items():
             if (query_lower in symbol.lower() or query_lower in name.lower()):
                 results.append({"symbol": symbol, "name": name, "exchange": exchange.upper()})
 
         return results
 
-    def search_all_exchanges(self, query: str) -> List[Dict[str, str]]:
+    def search_all_sources(self, query: str) -> List[Dict[str, str]]:
         """
-        Search for companies across all exchanges (NSE + BSE).
-        
-        Returns list of matching companies from both exchanges.
+        Search for entities across all sources.
         """
         results = []
-        results.extend(self.search_company(query, "NSE"))
-        results.extend(self.search_company(query, "BSE"))
+        results.extend(self.search_entity(query, "SRCA"))
+        results.extend(self.search_entity(query, "SRCB"))
         
         # Remove duplicates by (symbol, exchange) while preserving order
         seen = set()
@@ -218,26 +209,18 @@ class StockFetcher:
         
         return unique_results
 
-    def get_announcements(self, symbol: str, exchange: str = "NSE") -> List[Dict]:
-        """
-        Fetch corporate announcements for a given symbol.
-        
-        Args:
-            symbol: Stock symbol
-            exchange: "NSE" or "BSE"
-        
-        Returns list of announcements with id, title, date, and description.
-        """
+    def get_bulletins(self, symbol: str, exchange: str = "SRCA") -> List[Dict]:
+        """Fetch bulletins for a given tag from the specified source."""
         try:
-            logger.info(f"Fetching {exchange} announcements for {symbol}")
+            logger.info(f"Fetching {exchange} bulletins for {symbol}")
 
-            if exchange.upper() == "BSE":
-                scrip = self._get_bse_scrip_code(symbol)
+            if exchange.upper() == "SRCB":
+                scrip = self._get_srcb_code(symbol)
                 if not scrip:
-                    logger.warning(f"No BSE scrip code mapping found for {symbol}")
+                    logger.warning(f"No SRCB code mapping found for {symbol}")
                     return []
 
-                data = self._get_bse_json(
+                data = self._get_srcb_json(
                     "AnnSubCategoryGetData/w",
                     {
                         "pageno": "1",
@@ -252,11 +235,11 @@ class StockFetcher:
                 )
                 table = data.get("Table", []) if isinstance(data, dict) else []
 
-                announcements: List[Dict] = []
+                bulletins: List[Dict] = []
                 for item in table:
-                    title = item.get("NEWSSUB") or item.get("HEADLINE") or "Corporate Announcement"
+                    title = item.get("NEWSSUB") or item.get("HEADLINE") or "Data Bulletin"
                     date = item.get("DT_TM") or item.get("NEWS_DT") or ""
-                    ann_type = item.get("CATEGORYNAME") or item.get("SUBCATNAME") or "Announcement"
+                    bul_type = item.get("CATEGORYNAME") or item.get("SUBCATNAME") or "Bulletin"
                     attachment = item.get("ATTACHMENTNAME") or ""
                     link = (
                         f"https://www.bseindia.com/xml-data/corpfiling/AttachHis/{attachment}"
@@ -264,19 +247,19 @@ class StockFetcher:
                         else item.get("NSURL") or ""
                     )
 
-                    announcement_id = item.get("NEWSID") or self._make_id(
+                    bulletin_id = item.get("NEWSID") or self._make_id(
                         symbol.upper(),
                         str(date),
                         str(title),
                         str(link),
                     )
 
-                    announcements.append(
+                    bulletins.append(
                         {
-                            "id": str(announcement_id),
+                            "id": str(bulletin_id),
                             "title": str(title),
                             "date": str(date),
-                            "type": str(ann_type),
+                            "type": str(bul_type),
                             "published_date": str(item.get("DissemDT") or date),
                             "description": str(item.get("HEADLINE") or ""),
                             "link": str(link),
@@ -285,15 +268,15 @@ class StockFetcher:
                         }
                     )
 
-                announcements.sort(key=lambda x: self._date_key(x.get("date", "")), reverse=True)
-                return announcements[:50]
+                bulletins.sort(key=lambda x: self._date_key(x.get("date", "")), reverse=True)
+                return bulletins[:50]
 
-            raw_items = self._get_nse_json(
+            raw_items = self._get_srca_json(
                 "corporate-announcements",
                 {"index": "equities", "symbol": symbol.upper()},
             )
 
-            announcements: List[Dict] = []
+            bulletins: List[Dict] = []
             for item in raw_items:
                 item_symbol = (item.get("symbol") or item.get("sm_name") or "").upper()
                 if symbol.upper() not in item_symbol and item.get("symbol") != symbol.upper():
@@ -303,25 +286,25 @@ class StockFetcher:
                     item.get("subject")
                     or item.get("desc")
                     or item.get("attchmntText")
-                    or "Corporate Announcement"
+                    or "Data Bulletin"
                 )
                 date = item.get("an_dt") or item.get("date") or ""
-                ann_type = item.get("sm_name") or item.get("subjectType") or "Announcement"
+                bul_type = item.get("sm_name") or item.get("subjectType") or "Bulletin"
                 link = item.get("attchmntFile") or item.get("xbrl") or ""
 
-                announcement_id = item.get("id") or self._make_id(
+                bulletin_id = item.get("id") or self._make_id(
                     symbol.upper(),
                     date,
                     title,
                     link,
                 )
 
-                announcements.append(
+                bulletins.append(
                     {
-                        "id": str(announcement_id),
+                        "id": str(bulletin_id),
                         "title": str(title),
                         "date": str(date),
-                        "type": str(ann_type),
+                        "type": str(bul_type),
                         "published_date": str(item.get("an_dt") or date),
                         "description": str(item.get("desc") or ""),
                         "link": str(link),
@@ -330,34 +313,25 @@ class StockFetcher:
                     }
                 )
 
-            announcements.sort(key=lambda x: self._date_key(x.get("date", "")), reverse=True)
-            # NSE returns long history; cap list to avoid flooding alerts.
-            return announcements[:50]
+            bulletins.sort(key=lambda x: self._date_key(x.get("date", "")), reverse=True)
+            return bulletins[:50]
             
         except Exception as e:
-            logger.error(f"Error fetching announcements for {symbol} ({exchange}): {e}")
+            logger.error(f"Error fetching bulletins for {symbol} ({exchange}): {e}")
             return []
 
-    def get_corporate_actions(self, symbol: str, exchange: str = "NSE") -> List[Dict]:
-        """
-        Fetch corporate actions for a given symbol.
-        
-        Args:
-            symbol: Stock symbol
-            exchange: "NSE" or "BSE"
-        
-        Returns list of corporate actions with id, type, title, date, and description.
-        """
+    def get_activities(self, symbol: str, exchange: str = "SRCA") -> List[Dict]:
+        """Fetch activities for a given tag from the specified source."""
         try:
-            logger.info(f"Fetching {exchange} corporate actions for {symbol}")
+            logger.info(f"Fetching {exchange} activities for {symbol}")
 
-            if exchange.upper() == "BSE":
-                scrip = self._get_bse_scrip_code(symbol)
+            if exchange.upper() == "SRCB":
+                scrip = self._get_srcb_code(symbol)
                 if not scrip:
-                    logger.warning(f"No BSE scrip code mapping found for {symbol}")
+                    logger.warning(f"No SRCB code mapping found for {symbol}")
                     return []
 
-                data = self._get_bse_json(
+                data = self._get_srcb_json(
                     "DefaultData/w",
                     {
                         "scripcode": scrip,
@@ -372,25 +346,24 @@ class StockFetcher:
                 )
                 table = data if isinstance(data, list) else []
                 if isinstance(data, dict):
-                    # Some responses can be wrapped in a "Table" key depending on deployment.
                     table = data.get("Table", [])
 
-                actions: List[Dict] = []
+                activities: List[Dict] = []
                 for item in table:
-                    title = item.get("Purpose") or "Corporate Action"
-                    action_type = item.get("Purpose") or "Action"
+                    title = item.get("Purpose") or "Activity"
+                    activity_type = item.get("Purpose") or "Activity"
                     date = item.get("Ex_date") or item.get("RD_Date") or ""
 
-                    action_id = self._make_id(
+                    activity_id = self._make_id(
                         symbol.upper(),
                         str(date),
                         str(title),
                     )
 
-                    actions.append(
+                    activities.append(
                         {
-                            "id": str(action_id),
-                            "type": str(action_type),
+                            "id": str(activity_id),
+                            "type": str(activity_type),
                             "title": str(title),
                             "date": str(date),
                             "description": str(item.get("long_name") or ""),
@@ -398,37 +371,37 @@ class StockFetcher:
                         }
                     )
 
-                actions.sort(key=lambda x: self._date_key(x.get("date", "")), reverse=True)
-                return actions[:50]
+                activities.sort(key=lambda x: self._date_key(x.get("date", "")), reverse=True)
+                return activities[:50]
 
-            raw_items = self._get_nse_json(
+            raw_items = self._get_srca_json(
                 "corporates-corporateActions",
                 {"index": "equities", "symbol": symbol.upper()},
             )
 
-            actions: List[Dict] = []
+            activities: List[Dict] = []
             for item in raw_items:
                 title = (
                     item.get("purpose")
                     or item.get("subject")
                     or item.get("caType")
-                    or "Corporate Action"
+                    or "Activity"
                 )
-                action_type = item.get("caType") or item.get("purpose") or "Action"
+                activity_type = item.get("caType") or item.get("purpose") or "Activity"
                 date = item.get("exDate") or item.get("recordDate") or item.get("ndStartDate") or ""
                 link = item.get("attchmntFile") or item.get("xbrl") or ""
 
-                action_id = item.get("id") or self._make_id(
+                activity_id = item.get("id") or self._make_id(
                     symbol.upper(),
                     str(date),
                     str(title),
-                    str(action_type),
+                    str(activity_type),
                 )
 
-                actions.append(
+                activities.append(
                     {
-                        "id": str(action_id),
-                        "type": str(action_type),
+                        "id": str(activity_id),
+                        "type": str(activity_type),
                         "title": str(title),
                         "date": str(date),
                         "description": str(item.get("comp") or ""),
@@ -436,31 +409,30 @@ class StockFetcher:
                     }
                 )
 
-            actions.sort(key=lambda x: self._date_key(x.get("date", "")), reverse=True)
-            # Keep a bounded set for each run to avoid old-history spam.
-            return actions[:50]
+            activities.sort(key=lambda x: self._date_key(x.get("date", "")), reverse=True)
+            return activities[:50]
             
         except Exception as e:
-            logger.error(f"Error fetching corporate actions for {symbol} ({exchange}): {e}")
+            logger.error(f"Error fetching activities for {symbol} ({exchange}): {e}")
             return []
 
-    def validate_symbol(self, symbol: str, exchange: str = "NSE") -> bool:
-        """Check if symbol exists in the exchange."""
-        symbols = NSE_SYMBOLS if exchange.upper() == "NSE" else BSE_SYMBOLS
-        return symbol.upper() in symbols
+    def validate_tag(self, symbol: str, exchange: str = "SRCA") -> bool:
+        """Check if tag exists in the source."""
+        items = SRCA_ITEMS if exchange.upper() == "SRCA" else SRCB_ITEMS
+        return symbol.upper() in items
 
-    def get_company_name(self, symbol: str, exchange: str = "NSE") -> Optional[str]:
-        """Get company name for a symbol."""
-        symbols = NSE_SYMBOLS if exchange.upper() == "NSE" else BSE_SYMBOLS
-        return symbols.get(symbol.upper())
+    def get_entity_name(self, symbol: str, exchange: str = "SRCA") -> Optional[str]:
+        """Get entity name for a tag."""
+        items = SRCA_ITEMS if exchange.upper() == "SRCA" else SRCB_ITEMS
+        return items.get(symbol.upper())
 
-    def get_latest_updates(
+    def get_latest_records(
         self,
         symbol: str,
-        exchange: str = "NSE",
+        exchange: str = "SRCA",
         max_items: int = 4,
     ) -> Dict[str, List[Dict]]:
-        """Return latest announcements and corporate actions for one company."""
-        announcements = self.get_announcements(symbol, exchange)[:max_items]
-        actions = self.get_corporate_actions(symbol, exchange)[:max_items]
-        return {"announcements": announcements, "actions": actions}
+        """Return latest bulletins and activities for one entity."""
+        bulletins = self.get_bulletins(symbol, exchange)[:max_items]
+        activities = self.get_activities(symbol, exchange)[:max_items]
+        return {"bulletins": bulletins, "activities": activities}

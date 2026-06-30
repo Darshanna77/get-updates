@@ -3,17 +3,17 @@
 Runs every 5 minutes via GitHub Actions cron.
 Each run:
   1. Processes any Telegram commands sent since last run.
-  2. Checks NSE/BSE announcements for watchlisted companies.
+  2. Checks sources for new bulletins/activities for registered entities.
   3. Sends alerts to all configured chat IDs.
 
 Commands (send these to your bot on Telegram):
   /start or /help          – show command list
-  /add SYMBOL [EXCHANGE]   – e.g. /add INFY NSE  (default exchange: NSE)
-  /remove SYMBOL [EXCHANGE]– e.g. /remove INFY NSE
-  /list                    – show current watchlist
-  /search QUERY            – search NSE+BSE
-    /latestAnn SYMBOL [EXCHANGE] – latest 5 announcements (5 separate messages)
-    /latestAct SYMBOL [EXCHANGE] – corporate-action summary for last 10 years
+  /add TAG [SOURCE]        – e.g. /add INFY SRCA  (default source: SRCA)
+  /remove TAG [SOURCE]     – e.g. /remove INFY SRCA
+  /list                    – show current registry
+  /search QUERY            – search across all sources
+    /latestBul TAG [SOURCE] – latest 5 bulletins (5 separate messages)
+    /latestEvt TAG [SOURCE] – activity summary for last 10 years
   /status                  – bot status
 """
 import asyncio
@@ -21,7 +21,7 @@ import logging
 from datetime import datetime
 from typing import Optional
 from database import Database
-from nse_fetcher import BSE_SCRIP_CODES, StockFetcher
+from data_fetcher import SRCB_CODES, DataFetcher
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS
 from telegram import Bot
 
@@ -55,18 +55,18 @@ async def send_to_all_chats(bot: Bot, text: str, parse_mode: Optional[str] = "Ma
             logger.error("  → Make sure you have sent /start to the bot on Telegram first!")
 
 
-def exchange_fallback_link(symbol: str, exchange: str) -> str:
-    """Return a stable fallback page URL for the symbol/exchange."""
-    if exchange.upper() == "NSE":
+def source_fallback_link(symbol: str, exchange: str) -> str:
+    """Return a stable fallback page URL for the tag/source."""
+    if exchange.upper() == "SRCA":
         return f"https://www.nseindia.com/get-quotes/equity?symbol={symbol.upper()}"
-    scrip = BSE_SCRIP_CODES.get(symbol.upper(), "")
+    scrip = SRCB_CODES.get(symbol.upper(), "")
     if scrip:
         return f"https://www.bseindia.com/stock-share-price/-/-/{scrip}/"
     return "https://www.bseindia.com/"
 
 
 def parse_flexible_date(date_str: str) -> Optional[datetime]:
-    """Best-effort parser for exchange date formats."""
+    """Best-effort parser for source date formats."""
     if not date_str:
         return None
     formats = [
@@ -86,8 +86,8 @@ def parse_flexible_date(date_str: str) -> Optional[datetime]:
     return None
 
 
-def classify_action_group(action: dict) -> str:
-    """Group actions into meeting/discussion vs price/capital related buckets."""
+def classify_event_type(action: dict) -> str:
+    """Group activities into session/discussion vs price/capital related buckets."""
     text = f"{action.get('type', '')} {action.get('title', '')}".casefold()
     meeting_keywords = (
         "meeting",
@@ -124,7 +124,7 @@ async def send_chunked_lines(bot: Bot, chat_id: int, header: str, lines: list[st
 # Command processor  (runs at the start of every GitHub Actions job)
 # ---------------------------------------------------------------------------
 
-async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
+async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
     """Fetch new Telegram updates and process any commands."""
     last_id = db.get_last_update_id()
     logger.info(f"Fetching Telegram updates since update_id={last_id}")
@@ -165,17 +165,17 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
         # /start  /help ───────────────────────────────────────────────────
         if cmd in ("/start", "/help"):
             await reply(bot, chat_id,
-                "🤖 *NSE/BSE Announcements Bot*\n\n"
+                "🤖 *Pulse Monitor Bot*\n\n"
                 "*Commands:*\n"
-                "`/add SYMBOL [EXCHANGE]` – add to watchlist\n"
-                "  _e.g. /add INFY NSE  or  /add SBIN BSE_\n\n"
-                "`/remove SYMBOL [EXCHANGE]` – remove from watchlist\n"
-                "  _e.g. /remove INFY NSE_\n\n"
-                "`/list` – show your watchlist\n"
+                "`/add TAG [SOURCE]` – add to registry\n"
+                "  _e.g. /add INFY SRCA  or  /add SBIN SRCB_\n\n"
+                "`/remove TAG [SOURCE]` – remove from registry\n"
+                "  _e.g. /remove INFY SRCA_\n\n"
+                "`/list` – show your registry\n"
                 "`/view` – alias for /list\n"
-                "`/search QUERY` – find a company\n"
-                "`/latestAnn SYMBOL [EXCHANGE]` – latest 5 announcements\n"
-                "`/latestAct SYMBOL [EXCHANGE]` – 10-year action summary\n"
+                "`/search QUERY` – find an entity\n"
+                "`/latestBul TAG [SOURCE]` – latest 5 bulletins\n"
+                "`/latestEvt TAG [SOURCE]` – 10-year activity summary\n"
                 "`/check` – run immediate check\n"
                 "`/status` – bot status\n"
                 "`/help` – show this message\n\n"
@@ -184,12 +184,12 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
 
         # /list (/view, /veiw aliases) ───────────────────────────────────
         elif cmd in ("/list", "/view", "/veiw"):
-            watchlist = db.get_watchlist(chat_id)
+            watchlist = db.get_registry(chat_id)
             if not watchlist:
                 await reply(bot, chat_id,
-                    "📋 Your watchlist is empty\\.\n"
-                    "Use `/add SYMBOL EXCHANGE` to add a company\\.\n"
-                    "_Example: /add INFY NSE_"
+                    "📋 Your registry is empty\.\n"
+                    "Use `/add TAG SOURCE` to add an entity\.\n"
+                    "_Example: /add INFY SRCA_"
                 )
             else:
                 lines = "\n".join(
@@ -197,7 +197,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                     for i, c in enumerate(watchlist, 1)
                 )
                 await reply(bot, chat_id,
-                    f"📋 *Your Watchlist \\({len(watchlist)} companies\\):*\n\n{lines}"
+                    f"📋 *Your Registry \\({len(watchlist)} entities\\):*\n\n{lines}"
                 )
 
         # /search ─────────────────────────────────────────────────────────
@@ -208,43 +208,43 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                 )
             else:
                 query = " ".join(parts[1:])
-                results = fetcher.search_all_exchanges(query)
+                results = fetcher.search_all_sources(query)
                 if not results:
                     await reply(bot, chat_id,
-                        f"❌ No companies found matching *{query}*"
+                        f"❌ No entities found matching *{query}*"
                     )
                 else:
                     lines = []
                     for r in results:
-                        tick = "✓ " if db.is_in_watchlist(chat_id, r["symbol"], r["exchange"]) else ""
+                        tick = "✓ " if db.is_in_registry(chat_id, r["symbol"], r["exchange"]) else ""
                         lines.append(
                             f"{tick}`{r['symbol']}` \\({r['exchange']}\\) – {r['name']}"
                         )
                     await reply(bot, chat_id,
                         f"🔍 *Results for '{query}':*\n\n"
                         + "\n".join(lines)
-                        + "\n\n_To add: /add SYMBOL EXCHANGE_\n"
-                          "_e\\.g\\. /add INFY NSE_"
+                        + "\n\n_To add: /add TAG SOURCE_\n"
+                          "_e\.g\. /add INFY SRCA_"
                     )
 
         # /latestAnn ──────────────────────────────────────────────────────
-        elif cmd == "/latestann":
+        elif cmd == "/latestbul":
             if len(parts) < 2:
                 await reply(
                     bot,
                     chat_id,
                     "Usage: `/latestAnn SYMBOL [EXCHANGE]`\n"
-                    "_Exchange defaults to NSE if omitted._\n"
-                    "_Example: /latestAnn INFY NSE_",
+                    "_Source defaults to SRCA if omitted._\n"
+                    "_Example: /latestBul INFY SRCA_",
                 )
             else:
                 symbol = parts[1].upper()
-                exchange = parts[2].upper() if len(parts) >= 3 else "NSE"
+                exchange = parts[2].upper() if len(parts) >= 3 else "SRCA"
 
-                if exchange not in ("NSE", "BSE"):
-                    await reply(bot, chat_id, "❌ Exchange must be `NSE` or `BSE`.")
+                if exchange not in ("SRCA", "SRCB"):
+                    await reply(bot, chat_id, "❌ Source must be `SRCA` or `SRCB`.")
                 else:
-                    anns = fetcher.get_announcements(symbol, exchange)[:5]
+                    anns = fetcher.get_bulletins(symbol, exchange)[:5]
                     if not anns:
                         await reply(
                             bot,
@@ -260,44 +260,44 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                             parse_mode=None,
                         )
                         for i, ann in enumerate(anns, 1):
-                            resolved = fetcher.resolve_statement_link(
+                            resolved = fetcher.resolve_doc_link(
                                 symbol,
                                 exchange,
                                 ann.get("link", ""),
                             )
                             src = resolved.get("source", exchange)
                             download_link = resolved.get("link", "")
-                            release_link = ann.get("release_link") or exchange_fallback_link(symbol, exchange)
+                            release_link = ann.get("release_link") or source_fallback_link(symbol, exchange)
                             summary = ann.get("description") or ann.get("title", "N/A")
                             message = (
                                 f"[{i}/5] Announcement for {symbol} ({exchange})\n\n"
-                                f"Type of Information: {ann.get('type', 'Announcement')}\n"
-                                f"Information Date: {ann.get('date', 'N/A')}\n"
+                                f"Type: {ann.get('type', 'Bulletin')}\n"
+                                f"Date: {ann.get('date', 'N/A')}\n"
                                 f"Summary: {summary}\n"
-                                f"Published Date: {ann.get('published_date', ann.get('date', 'N/A'))}\n"
+                                f"Published: {ann.get('published_date', ann.get('date', 'N/A'))}\n"
                                 f"Release Link: {release_link}\n"
                                 f"Download Copy: {(f'({src}) ' + download_link) if download_link else 'Not available'}"
                             )
                             await reply(bot, chat_id, message, parse_mode=None)
 
         # /latestAct ──────────────────────────────────────────────────────
-        elif cmd == "/latestact":
+        elif cmd == "/latestevt":
             if len(parts) < 2:
                 await reply(
                     bot,
                     chat_id,
                     "Usage: `/latestAct SYMBOL [EXCHANGE]`\n"
-                    "_Exchange defaults to NSE if omitted._\n"
-                    "_Example: /latestAct INFY NSE_",
+                    "_Source defaults to SRCA if omitted._\n"
+                    "_Example: /latestEvt INFY SRCA_",
                 )
             else:
                 symbol = parts[1].upper()
-                exchange = parts[2].upper() if len(parts) >= 3 else "NSE"
+                exchange = parts[2].upper() if len(parts) >= 3 else "SRCA"
 
-                if exchange not in ("NSE", "BSE"):
-                    await reply(bot, chat_id, "❌ Exchange must be `NSE` or `BSE`.")
+                if exchange not in ("SRCA", "SRCB"):
+                    await reply(bot, chat_id, "❌ Source must be `SRCA` or `SRCB`.")
                 else:
-                    actions = fetcher.get_corporate_actions(symbol, exchange)
+                    actions = fetcher.get_activities(symbol, exchange)
                     ten_years_ago = datetime.now().timestamp() - (10 * 365.25 * 24 * 3600)
 
                     filtered = []
@@ -317,7 +317,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                         meeting_lines = []
                         for idx, act in enumerate(filtered, 1):
                             line = f"{idx}. {act.get('date', 'N/A')} - {act.get('title', 'N/A')}"
-                            if classify_action_group(act) == "meeting":
+                            if classify_event_type(act) == "meeting":
                                 meeting_lines.append(line)
                             else:
                                 price_lines.append(line)
@@ -346,35 +346,35 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
             if len(parts) < 2:
                 await reply(bot, chat_id,
                     "Usage: `/add SYMBOL \\[EXCHANGE\\]`\n"
-                    "_Exchange defaults to NSE if omitted\\._\n"
-                    "_Example: /add INFY NSE_"
+                    "_Source defaults to SRCA if omitted\\._\n"
+                    "_Example: /add INFY SRCA_"
                 )
             else:
                 symbol   = parts[1].upper()
-                exchange = parts[2].upper() if len(parts) >= 3 else "NSE"
+                exchange = parts[2].upper() if len(parts) >= 3 else "SRCA"
 
-                if exchange not in ("NSE", "BSE"):
+                if exchange not in ("SRCA", "SRCB"):
                     await reply(bot, chat_id,
-                        f"❌ Unknown exchange *{exchange}*\\. Use `NSE` or `BSE`\\."
+                        f"❌ Unknown source *{exchange}*\\. Use `SRCA` or `SRCB`\\."
                     )
                 else:
-                    company_name = fetcher.get_company_name(symbol, exchange) or symbol
-                    added = db.add_to_watchlist(chat_id, symbol, company_name, exchange)
+                    entity_name = fetcher.get_entity_name(symbol, exchange) or symbol
+                    added = db.add_to_registry(chat_id, symbol, entity_name, exchange)
                     if added:
                         await reply(bot, chat_id,
-                            f"✅ Added *{symbol}* \\({exchange}\\) – {company_name} to watchlist\\!"
+                            f"✅ Added *{symbol}* \\({exchange}\\) – {entity_name} to registry\\!"
                         )
                     else:
                         await reply(bot, chat_id,
-                            f"⚠️ *{symbol}* \\({exchange}\\) is already in your watchlist\\."
+                            f"⚠️ *{symbol}* \\({exchange}\\) is already in your registry\\."
                         )
 
         # /remove ─────────────────────────────────────────────────────────
         elif cmd == "/remove":
             if len(parts) < 2:
-                watchlist = db.get_watchlist(chat_id)
+                watchlist = db.get_registry(chat_id)
                 if not watchlist:
-                    await reply(bot, chat_id, "Your watchlist is empty\\.")
+                    await reply(bot, chat_id, "Your registry is empty\\.")
                 else:
                     lines = "\n".join(
                         f"{i}\\. {c['symbol']} \\({c['exchange']}\\) – {c['name']}"
@@ -382,28 +382,28 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                     )
                     await reply(bot, chat_id,
                         f"To remove, use:\n`/remove SYMBOL EXCHANGE`\n\n"
-                        f"*Current watchlist:*\n{lines}\n\n"
-                        f"_Example: /remove INFY NSE_"
+                        f"*Current registry:*\n{lines}\n\n"
+                        f"_Example: /remove INFY SRCA_"
                     )
             else:
                 symbol   = parts[1].upper()
-                exchange = parts[2].upper() if len(parts) >= 3 else "NSE"
-                removed  = db.remove_from_watchlist(chat_id, symbol, exchange)
+                exchange = parts[2].upper() if len(parts) >= 3 else "SRCA"
+                removed  = db.remove_from_registry(chat_id, symbol, exchange)
                 if removed:
                     await reply(bot, chat_id,
-                        f"✅ Removed *{symbol}* \\({exchange}\\) from watchlist\\."
+                        f"✅ Removed *{symbol}* \\({exchange}\\) from registry\\."
                     )
                 else:
                     await reply(bot, chat_id,
-                        f"❌ *{symbol}* \\({exchange}\\) was not found in your watchlist\\."
+                        f"❌ *{symbol}* \\({exchange}\\) was not found in your registry\\."
                     )
 
         # /status ─────────────────────────────────────────────────────────
         elif cmd == "/status":
-            watchlist = db.get_watchlist(chat_id)
+            watchlist = db.get_registry(chat_id)
             await reply(bot, chat_id,
                 f"📊 *Bot Status*\n\n"
-                f"📋 Your Watchlist: {len(watchlist)} companies\n"
+                f"📋 Your Registry: {len(watchlist)} entities\n"
                 f"🔄 Poll interval: every 5 minutes\n"
                 f"✅ Running via GitHub Actions"
             )
@@ -422,12 +422,12 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
 # Announcement checker
 # ---------------------------------------------------------------------------
 
-async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
-    """Check NSE/BSE for each watchlisted company and send alerts per chat."""
+async def run_update_check(bot: Bot, db: Database, fetcher: DataFetcher):
+    """Check all sources for new bulletins/activities and send alerts per chat."""
     # Get all unique chat IDs that have watchlist entries
     chat_ids = db.get_all_chat_ids()
     if not chat_ids:
-        logger.info("No chats with watchlist entries found.")
+        logger.info("No chats with registry entries found.")
         return 0, 0, 0
 
     total_ann_count = 0
@@ -435,8 +435,8 @@ async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
     total_companies = 0
 
     for chat_id in chat_ids:
-        watchlist = db.get_watchlist(chat_id)
-        logger.info(f"Checking {len(watchlist)} companies for chat_id {chat_id}...")
+        watchlist = db.get_registry(chat_id)
+        logger.info(f"Checking {len(watchlist)} entities for chat_id {chat_id}...")
         total_companies += len(watchlist)
 
         for company in watchlist:
@@ -445,61 +445,61 @@ async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
             logger.info(f"  → {symbol} ({exchange})")
 
             try:
-                for ann in fetcher.get_announcements(symbol, exchange)[:4]:
-                    if db.mark_announcement_processed(
+                for ann in fetcher.get_bulletins(symbol, exchange)[:4]:
+                    if db.mark_bulletin_processed(
                         symbol, exchange,
                         ann.get("id", ""), ann.get("title", ""), ann.get("date", ""),
                     ):
                         total_ann_count += 1
-                        resolved = fetcher.resolve_statement_link(
+                        resolved = fetcher.resolve_doc_link(
                             symbol,
                             exchange,
                             ann.get("link", ""),
                         )
                         src = resolved.get("source", exchange)
                         download_link = resolved.get("link", "")
-                        release_link = ann.get("release_link") or exchange_fallback_link(symbol, exchange)
+                        release_link = ann.get("release_link") or source_fallback_link(symbol, exchange)
                         summary = ann.get("description") or ann.get("title", "N/A")
                         await reply(bot, chat_id,
-                            f"📢 New Announcement for {company['name']} ({symbol})\n"
-                            f"Exchange: {exchange}\n\n"
-                            f"Type of Information: {ann.get('type', 'Announcement')}\n"
-                            f"Information Date: {ann.get('date', 'N/A')}\n"
+                            f"📢 New Bulletin for {company['name']} ({symbol})\n"
+                            f"Source: {exchange}\n\n"
+                            f"Type: {ann.get('type', 'Bulletin')}\n"
+                            f"Date: {ann.get('date', 'N/A')}\n"
                             f"Summary: {summary}\n"
-                            f"Published Date: {ann.get('published_date', ann.get('date', 'N/A'))}\n"
+                            f"Published: {ann.get('published_date', ann.get('date', 'N/A'))}\n"
                             f"Release Link: {release_link}\n"
                             f"Download Copy: {(f'({src}) ' + download_link) if download_link else 'Not available'}"
                         , parse_mode=None)
             except Exception as e:
-                logger.error(f"Announcements error for {symbol}: {e}")
+                logger.error(f"Bulletins error for {symbol}: {e}")
 
             try:
-                for action in fetcher.get_corporate_actions(symbol, exchange)[:4]:
-                    if db.mark_corporate_action_processed(
+                for action in fetcher.get_activities(symbol, exchange)[:4]:
+                    if db.mark_activity_processed(
                         symbol, exchange,
                         action.get("id", ""), action.get("type", ""),
                         action.get("title", ""), action.get("date", ""),
                     ):
                         total_act_count += 1
-                        resolved = fetcher.resolve_statement_link(
+                        resolved = fetcher.resolve_doc_link(
                             symbol,
                             exchange,
                             action.get("link", ""),
                         )
                         src = resolved.get("source", exchange)
                         link = resolved.get("link", "")
-                        group_name = "Meetings/Discussions" if classify_action_group(action) == "meeting" else "Price/Capital Related"
+                        group_name = "Sessions/Discussions" if classify_event_type(action) == "meeting" else "Price/Capital Related"
                         await reply(bot, chat_id,
-                            f"💼 New Corporate Action for {company['name']} ({symbol})\n"
-                            f"Exchange: {exchange}\n\n"
-                            f"Category Group: {group_name}\n"
+                            f"💼 New Activity for {company['name']} ({symbol})\n"
+                            f"Source: {exchange}\n\n"
+                            f"Category: {group_name}\n"
                             f"Date: {action.get('date', 'N/A')}\n"
                             f"Summary: {action.get('title', 'N/A')}\n"
                             f"Type: {action.get('type', 'N/A')}\n"
                             f"Download Copy: {(f'({src}) ' + link) if link else 'Not available'}"
                         , parse_mode=None)
             except Exception as e:
-                logger.error(f"Corporate actions error for {symbol}: {e}")
+                logger.error(f"Activities error for {symbol}: {e}")
 
     return total_ann_count, total_act_count, total_companies
 
@@ -510,7 +510,7 @@ async def run_announcement_check(bot: Bot, db: Database, fetcher: StockFetcher):
 
 async def main():
     db      = Database()
-    fetcher = StockFetcher()
+    fetcher = DataFetcher()
     bot     = Bot(token=TELEGRAM_BOT_TOKEN)
 
     # Verify bot token
@@ -527,7 +527,7 @@ async def main():
     await process_commands(bot, db, fetcher)
 
     # 2. Check for new announcements
-    ann_count, act_count, total = await run_announcement_check(bot, db, fetcher)
+    ann_count, act_count, total = await run_update_check(bot, db, fetcher)
 
     # 3. Send daily summary once per day (only if new day)
     today = datetime.now().strftime("%Y-%m-%d")
@@ -536,13 +536,13 @@ async def main():
         # Send per-chat daily summary
         chat_ids = db.get_all_chat_ids()
         for chat_id in chat_ids:
-            monitored = db.get_watchlist(chat_id)
+            monitored = db.get_registry(chat_id)
             monitored_list = ", ".join(
                 [f"{x['symbol']}({x['exchange']})" for x in monitored]
             ) or "None"
             await reply(bot, chat_id,
                 f"📋 *Daily Watchlist Summary*\n\n"
-                f"Your Monitored Companies ({len(monitored)}): {monitored_list}\n\n"
+                f"Your Tracked Entities ({len(monitored)}): {monitored_list}\n\n"
                 f"_Bot polling every 5 minutes. New alerts will appear here._ "
             )
         db.set_last_daily_summary_date(today)

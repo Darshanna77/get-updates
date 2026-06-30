@@ -1,4 +1,4 @@
-"""NSE Corporate Announcements Monitor - Telegram Bot."""
+"""Pulse Monitor - Telegram Bot."""
 import logging
 import asyncio
 from typing import Dict, List
@@ -17,7 +17,7 @@ from telegram.error import TelegramError
 
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS, POLL_INTERVAL
 from database import Database
-from nse_fetcher import StockFetcher
+from data_fetcher import DataFetcher
 
 # Logging setup
 logging.basicConfig(
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Initialize components
 db = Database()
-fetcher = StockFetcher()
+fetcher = DataFetcher()
 
 # Conversation states
 SEARCH_QUERY, CONFIRM_SELECTION, REMOVE_SELECTION, SELECT_EXCHANGE = range(4)
@@ -373,12 +373,12 @@ async def process_confirm_remove(update: Update, context: ContextTypes.DEFAULT_T
     watchlist = user_search_results[user_id]
     selected = watchlist[idx]
 
-    # Remove from watchlist, selected["exchange"])
+    # Remove from registry
+    success = fetcher.validate_tag(selected["symbol"], selected["exchange"])
 
     if success:
         await query.edit_message_text(
-            f"✅ Removed {selected['symbol']} ({selected['exchange']})
-            f"✅ Removed {selected['symbol']} from watchlist!",
+            f"✅ Removed {selected['symbol']} ({selected['exchange']}) from registry!",
             parse_mode="Markdown"
         )
     else:

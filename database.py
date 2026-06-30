@@ -1,4 +1,4 @@
-"""Database setup and operations for NSE Bot."""
+"""Database setup and operations for Pulse Monitor."""
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -31,50 +31,50 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
 
-            # Watchlist table - stores companies to monitor per chat_id
+            # Registry table - stores entities to monitor per chat_id
             cursor.execute(
                 """
-                CREATE TABLE IF NOT EXISTS watchlist (
+                CREATE TABLE IF NOT EXISTS registry (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     chat_id INTEGER NOT NULL,
                     symbol TEXT NOT NULL,
-                    company_name TEXT NOT NULL,
-                    exchange TEXT NOT NULL,
+                    entity_name TEXT NOT NULL,
+                    source TEXT NOT NULL,
                     added_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(chat_id, symbol, exchange)
+                    UNIQUE(chat_id, symbol, source)
                 )
                 """
             )
 
-            # Processed announcements - prevents duplicate alerts
+            # Processed bulletins - prevents duplicate alerts
             cursor.execute(
                 """
-                CREATE TABLE IF NOT EXISTS processed_announcements (
+                CREATE TABLE IF NOT EXISTS processed_bulletins (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     symbol TEXT NOT NULL,
-                    exchange TEXT NOT NULL,
-                    announcement_id TEXT NOT NULL,
-                    announcement_title TEXT,
-                    announcement_date TIMESTAMP,
+                    source TEXT NOT NULL,
+                    bulletin_id TEXT NOT NULL,
+                    bulletin_title TEXT,
+                    bulletin_date TIMESTAMP,
                     processed_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(symbol, exchange, announcement_id)
+                    UNIQUE(symbol, source, bulletin_id)
                 )
                 """
             )
 
-            # Processed corporate actions - prevents duplicate alerts
+            # Processed activities - prevents duplicate alerts
             cursor.execute(
                 """
-                CREATE TABLE IF NOT EXISTS processed_corporate_actions (
+                CREATE TABLE IF NOT EXISTS processed_activities (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     symbol TEXT NOT NULL,
-                    exchange TEXT NOT NULL,
-                    action_id TEXT NOT NULL,
-                    action_type TEXT,
-                    action_title TEXT,
-                    action_date TIMESTAMP,
+                    source TEXT NOT NULL,
+                    activity_id TEXT NOT NULL,
+                    activity_type TEXT,
+                    activity_title TEXT,
+                    activity_date TIMESTAMP,
                     processed_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(symbol, exchange, action_id)
+                    UNIQUE(symbol, source, activity_id)
                 )
                 """
             )
@@ -153,89 +153,89 @@ class Database:
             )
             cursor.close()
 
-    def add_to_watchlist(self, chat_id: int, symbol: str, company_name: str, exchange: str = "NSE") -> bool:
-        """Add company to watchlist for a specific chat."""
+    def add_to_registry(self, chat_id: int, symbol: str, entity_name: str, source: str = "SRCA") -> bool:
+        """Add entity to registry for a specific chat."""
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    INSERT INTO watchlist (chat_id, symbol, company_name, exchange)
+                    INSERT INTO registry (chat_id, symbol, entity_name, source)
                     VALUES (?, ?, ?, ?)
                     """,
-                    (chat_id, symbol.upper(), company_name, exchange.upper()),
+                    (chat_id, symbol.upper(), entity_name, source.upper()),
                 )
                 cursor.close()
                 return True
         except sqlite3.IntegrityError:
             return False
 
-    def remove_from_watchlist(self, chat_id: int, symbol: str, exchange: str = "NSE") -> bool:
-        """Remove company from watchlist for a specific chat."""
+    def remove_from_registry(self, chat_id: int, symbol: str, source: str = "SRCA") -> bool:
+        """Remove entity from registry for a specific chat."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "DELETE FROM watchlist WHERE chat_id = ? AND symbol = ? AND exchange = ?",
-                (chat_id, symbol.upper(), exchange.upper()),
+                "DELETE FROM registry WHERE chat_id = ? AND symbol = ? AND source = ?",
+                (chat_id, symbol.upper(), source.upper()),
             )
             cursor.close()
             return cursor.rowcount > 0
 
-    def get_watchlist(self, chat_id: int) -> list:
-        """Get all companies in watchlist for a specific chat."""
+    def get_registry(self, chat_id: int) -> list:
+        """Get all entities in registry for a specific chat."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT symbol, company_name, exchange FROM watchlist WHERE chat_id = ? ORDER BY company_name", (chat_id,))
+            cursor.execute("SELECT symbol, entity_name, source FROM registry WHERE chat_id = ? ORDER BY entity_name", (chat_id,))
             results = cursor.fetchall()
             cursor.close()
             return [{"symbol": row[0], "name": row[1], "exchange": row[2]} for row in results]
 
-    def is_in_watchlist(self, chat_id: int, symbol: str, exchange: str = "NSE") -> bool:
-        """Check if symbol is in watchlist for a specific chat."""
+    def is_in_registry(self, chat_id: int, symbol: str, source: str = "SRCA") -> bool:
+        """Check if tag is in registry for a specific chat."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT 1 FROM watchlist WHERE chat_id = ? AND symbol = ? AND exchange = ?",
-                (chat_id, symbol.upper(), exchange.upper()),
+                "SELECT 1 FROM registry WHERE chat_id = ? AND symbol = ? AND source = ?",
+                (chat_id, symbol.upper(), source.upper()),
             )
             result = cursor.fetchone()
             cursor.close()
             return result is not None
 
-    def mark_announcement_processed(
-        self, symbol: str, exchange: str, announcement_id: str, title: str, date: str
+    def mark_bulletin_processed(
+        self, symbol: str, source: str, bulletin_id: str, title: str, date: str
     ) -> bool:
-        """Mark announcement as processed."""
+        """Mark bulletin as processed."""
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    INSERT INTO processed_announcements
-                    (symbol, exchange, announcement_id, announcement_title, announcement_date)
+                    INSERT INTO processed_bulletins
+                    (symbol, source, bulletin_id, bulletin_title, bulletin_date)
                     VALUES (?, ?, ?, ?, ?)
                     """,
-                    (symbol.upper(), exchange.upper(), announcement_id, title, date),
+                    (symbol.upper(), source.upper(), bulletin_id, title, date),
                 )
                 cursor.close()
                 return True
         except sqlite3.IntegrityError:
             return False
 
-    def mark_corporate_action_processed(
-        self, symbol: str, exchange: str, action_id: str, action_type: str, title: str, date: str
+    def mark_activity_processed(
+        self, symbol: str, source: str, activity_id: str, activity_type: str, title: str, date: str
     ) -> bool:
-        """Mark corporate action as processed."""
+        """Mark activity as processed."""
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    INSERT INTO processed_corporate_actions
-                    (symbol, exchange, action_id, action_type, action_title, action_date)
+                    INSERT INTO processed_activities
+                    (symbol, source, activity_id, activity_type, activity_title, activity_date)
                     VALUES (?, ?, ?, ?, ?, ?)
                     """,
-                    (symbol.upper(), exchange.upper(), action_id, action_type, title, date),
+                    (symbol.upper(), source.upper(), activity_id, activity_type, title, date),
                 )
                 cursor.close()
                 return True
@@ -243,10 +243,10 @@ class Database:
             return False
 
     def get_all_chat_ids(self) -> list:
-        """Get all unique chat IDs that have watchlist entries."""
+        """Get all unique chat IDs that have registry entries."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT DISTINCT chat_id FROM watchlist")
+            cursor.execute("SELECT DISTINCT chat_id FROM registry")
             results = cursor.fetchall()
             cursor.close()
             return [row[0] for row in results]
@@ -257,14 +257,14 @@ class Database:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                DELETE FROM processed_announcements
+                DELETE FROM processed_bulletins
                 WHERE datetime(processed_date) < datetime('now', ? || ' days')
                 """,
                 (f"-{days}",),
             )
             cursor.execute(
                 """
-                DELETE FROM processed_corporate_actions
+                DELETE FROM processed_activities
                 WHERE datetime(processed_date) < datetime('now', ? || ' days')
                 """,
                 (f"-{days}",),

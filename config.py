@@ -1,4 +1,4 @@
-"""Configuration file for NSE Bot."""
+"""Configuration for Pulse Monitor."""
 import os
 from dotenv import load_dotenv
 
@@ -18,15 +18,15 @@ if not TELEGRAM_CHAT_IDS:
 TELEGRAM_CHAT_IDS = [int(chat_id.strip()) for chat_id in TELEGRAM_CHAT_IDS.split(",")]
 
 # Database Configuration
-DB_PATH = os.getenv("DB_PATH", "nse_bot.db")
+DB_PATH = os.getenv("DB_PATH", "pulse.db")
 
 # Polling Configuration
 POLL_INTERVAL = 300  # 5 minutes in seconds
 
-# NSE Configuration
-NSE_ANNOUNCEMENTS_URL = "https://www.nseindia.com/corporate/corporateBoard.jsp"
-NSE_CORPORATE_ACTIONS_URL = "https://www.nseindia.com/corporateActions/"
+# Source A endpoints
+SRCA_BULLETINS_URL = "https://www.nseindia.com/corporate/corporateBoard.jsp"
+SRCA_EVENTS_URL = "https://www.nseindia.com/corporateActions/"
 
-# BSE Configuration
-BSE_ANNOUNCEMENTS_URL = "https://www.bseindia.com/corporates/announcements.aspx"
-BSE_CORPORATE_ACTIONS_URL = "https://www.bseindia.com/corporates/CorporateActions.aspx"
+# Source B endpoints
+SRCB_BULLETINS_URL = "https://www.bseindia.com/corporates/announcements.aspx"
+SRCB_EVENTS_URL = "https://www.bseindia.com/corporates/CorporateActions.aspx"
