@@ -1,6 +1,6 @@
 # SRCA & SRCB Bot - Complete Deployment Guide
 
-This guide will walk you through setting up the SRCA & SRCB Corporate Announcements Monitor bot, step by step.
+This guide will walk you through setting up the SRCA & SRCB Data Bulletins Monitor bot, step by step.
 
 ## Prerequisites Checklist
 
@@ -19,7 +19,7 @@ This guide will walk you through setting up the SRCA & SRCB Corporate Announceme
 2. Send message `/start`
 3. Send message `/newbot`
 4. Follow the prompts:
-   - Choose a name (e.g., "SRCA & SRCB Announcements Monitor")
+   - Choose a name (e.g., "SRCA & SRCB Bulletins Monitor")
    - Choose a username (e.g., "pulse_monitor_bot")
 5. BotFather will send you a token like: `123456789:ABCDEFGHIjklmnopQRSTUvwxyz`
 6. **Save this token** - you'll need it
@@ -49,7 +49,7 @@ You can send alerts to one or multiple Telegram chat IDs!
 1. Go to https://github.com/new
 2. Fill in details:
    - Repository name: `pulse-monitor` (or any name)
-   - Description: "Personal SRCA & SRCB Corporate Announcements Monitor"
+   - Description: "Personal SRCA & SRCB Data Bulletins Monitor"
    - **Select "Private"**
    - Initialize with README
 3. Click "Create repository"
@@ -212,20 +212,20 @@ Your bot is now live and will:
 
 1. **Open Telegram** and find your bot (search the username you created)
 
-2. **Add Companies to Registry:**
+2. **Add Entities to Registry:**
    ```
    /search Infosys
    /add
-   [Select from list - shows exchange (SRCA/SRCB)]
+   [Select from list - shows source (SRCA/SRCB)]
    ```
 
 3. **View Your Registry:**
    ```
    /list
    ```
-   Shows all companies with their exchange (SRCA or SRCB)
+   Shows all entities with their source (SRCA or SRCB)
 
-4. **Remove Companies:**
+4. **Remove Entities:**
    ```
    /remove
    [Select from list]
@@ -249,7 +249,7 @@ Your bot is now live and will:
 ### No Updates Received
 
 1. Check your registry: `/list`
-2. Add companies: `/search` then `/add`
+2. Add entities: `/search` then `/add`
 3. Manually trigger check: `/check`
 
 ### Workflow Fails
@@ -280,9 +280,9 @@ Go to "Actions" tab in GitHub to:
 
 ---
 
-## Modifying SRCA & SRCB Companies
+## Modifying SRCA & SRCB Entities
 
-The bot currently has a limited list of SRCA and SRCB companies. To add more:
+The bot currently has a limited list of SRCA and SRCB entities. To add more:
 
 1. Edit `data_fetcher.py`
 2. Add SRCA entities to `SRCA_ITEMS` dictionary:
@@ -312,7 +312,7 @@ The bot currently has a limited list of SRCA and SRCB companies. To add more:
 
 1. **Cleanup old records:** Database automatically cleans records older than 30 days
 2. **Check workflow status:** Occasionally review Actions tab
-3. **Update company list:** Add new companies as needed
+3. **Update entity list:** Add new entities as needed
 
 ---
 
@@ -328,8 +328,8 @@ For issues:
 
 ## Next Steps (Optional Enhancements)
 
-- Set up notifications for specific announcement types
-- Add more SRCA companies to registry
+- Set up notifications for specific bulletin types
+- Add more SRCA entities to registry
 - Export registry data
-- Add announcement filtering
+- Add bulletin filtering
 - Create backup of database

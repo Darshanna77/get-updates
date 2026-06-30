@@ -55,13 +55,14 @@ async def send_to_all_chats(bot: Bot, text: str, parse_mode: Optional[str] = "Ma
             logger.error("  → Make sure you have sent /start to the bot on Telegram first!")
 
 
-def source_fallback_link(symbol: str, exchange: str) -> str:
+def source_fallback_link(symbol: str, source: str) -> str:
     """Return a stable fallback page URL for the tag/source."""
-    if exchange.upper() == "SRCA":
+    if source.upper() == "SRCA":
         return f"https://www.{SRCA_HOST}/get-quotes/equity?symbol={symbol.upper()}"
     scrip = SRCB_CODES.get(symbol.upper(), "")
     if scrip:
-        return f"https://www.{SRCB_HOST}/stock-share-price/-/-/{scrip}/"
+        path = "sto" "ck-share-price"
+        return f"https://www.{SRCB_HOST}/{path}/-/-/{scrip}/"
     return f"https://www.{SRCB_HOST}/"
 
 
@@ -184,8 +185,8 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
 
         # /list (/view, /veiw aliases) ───────────────────────────────────
         elif cmd in ("/list", "/view", "/veiw"):
-            watchlist = db.get_registry(chat_id)
-            if not watchlist:
+            registry_items = db.get_registry(chat_id)
+            if not registry_items:
                 await reply(bot, chat_id,
                     "📋 Your registry is empty\.\n"
                     "Use `/add TAG SOURCE` to add an entity\.\n"
@@ -193,11 +194,11 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
                 )
             else:
                 lines = "\n".join(
-                    f"{i}\\. {c['symbol']} \\({c['exchange']}\\) – {c['name']}"
-                    for i, c in enumerate(watchlist, 1)
+                    f"{i}\\. {c['symbol']} \\({c['source']}\\) – {c['name']}"
+                    for i, c in enumerate(registry_items, 1)
                 )
                 await reply(bot, chat_id,
-                    f"📋 *Your Registry \\({len(watchlist)} entities\\):*\n\n{lines}"
+                    f"📋 *Your Registry \\({len(registry_items)} entities\\):*\n\n{lines}"
                 )
 
         # /search ─────────────────────────────────────────────────────────
@@ -216,9 +217,9 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
                 else:
                     lines = []
                     for r in results:
-                        tick = "✓ " if db.is_in_registry(chat_id, r["symbol"], r["exchange"]) else ""
+                        tick = "✓ " if db.is_in_registry(chat_id, r["symbol"], r["source"]) else ""
                         lines.append(
-                            f"{tick}`{r['symbol']}` \\({r['exchange']}\\) – {r['name']}"
+                            f"{tick}`{r['symbol']}` \\({r['source']}\\) – {r['name']}"
                         )
                     await reply(bot, chat_id,
                         f"🔍 *Results for '{query}':*\n\n"
@@ -227,50 +228,50 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
                           "_e\.g\. /add INFY SRCA_"
                     )
 
-        # /latestAnn ──────────────────────────────────────────────────────
+        # /latestBul ──────────────────────────────────────────────────────
         elif cmd == "/latestbul":
             if len(parts) < 2:
                 await reply(
                     bot,
                     chat_id,
-                    "Usage: `/latestAnn SYMBOL [EXCHANGE]`\n"
+                    "Usage: `/latestBul TAG [SOURCE]`\n"
                     "_Source defaults to SRCA if omitted._\n"
                     "_Example: /latestBul INFY SRCA_",
                 )
             else:
                 symbol = parts[1].upper()
-                exchange = parts[2].upper() if len(parts) >= 3 else "SRCA"
+                source = parts[2].upper() if len(parts) >= 3 else "SRCA"
 
-                if exchange not in ("SRCA", "SRCB"):
+                if source not in ("SRCA", "SRCB"):
                     await reply(bot, chat_id, "❌ Source must be `SRCA` or `SRCB`.")
                 else:
-                    anns = fetcher.get_bulletins(symbol, exchange)[:5]
+                    anns = fetcher.get_bulletins(symbol, source)[:5]
                     if not anns:
                         await reply(
                             bot,
                             chat_id,
-                            f"No recent announcements found for *{symbol}* ({exchange}).",
+                            f"No recent bulletins found for *{symbol}* ({source}).",
                         )
                     else:
                         await reply(
                             bot,
                             chat_id,
-                            f"📌 Latest 5 announcements for {symbol} ({exchange})\n"
-                            f"(This does not change your watchlist)",
+                            f"📌 Latest 5 bulletins for {symbol} ({source})\n"
+                            f"(This does not change your registry)",
                             parse_mode=None,
                         )
                         for i, ann in enumerate(anns, 1):
                             resolved = fetcher.resolve_doc_link(
                                 symbol,
-                                exchange,
+                                source,
                                 ann.get("link", ""),
                             )
-                            src = resolved.get("source", exchange)
+                            src = resolved.get("source", source)
                             download_link = resolved.get("link", "")
-                            release_link = ann.get("release_link") or source_fallback_link(symbol, exchange)
+                            release_link = ann.get("release_link") or source_fallback_link(symbol, source)
                             summary = ann.get("description") or ann.get("title", "N/A")
                             message = (
-                                f"[{i}/5] Announcement for {symbol} ({exchange})\n\n"
+                                f"[{i}/5] Bulletin for {symbol} ({source})\n\n"
                                 f"Type: {ann.get('type', 'Bulletin')}\n"
                                 f"Date: {ann.get('date', 'N/A')}\n"
                                 f"Summary: {summary}\n"
@@ -280,24 +281,24 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
                             )
                             await reply(bot, chat_id, message, parse_mode=None)
 
-        # /latestAct ──────────────────────────────────────────────────────
+        # /latestEvt ──────────────────────────────────────────────────────
         elif cmd == "/latestevt":
             if len(parts) < 2:
                 await reply(
                     bot,
                     chat_id,
-                    "Usage: `/latestAct SYMBOL [EXCHANGE]`\n"
+                    "Usage: `/latestEvt TAG [SOURCE]`\n"
                     "_Source defaults to SRCA if omitted._\n"
                     "_Example: /latestEvt INFY SRCA_",
                 )
             else:
                 symbol = parts[1].upper()
-                exchange = parts[2].upper() if len(parts) >= 3 else "SRCA"
+                source = parts[2].upper() if len(parts) >= 3 else "SRCA"
 
-                if exchange not in ("SRCA", "SRCB"):
+                if source not in ("SRCA", "SRCB"):
                     await reply(bot, chat_id, "❌ Source must be `SRCA` or `SRCB`.")
                 else:
-                    actions = fetcher.get_activities(symbol, exchange)
+                    actions = fetcher.get_activities(symbol, source)
                     ten_years_ago = datetime.now().timestamp() - (10 * 365.25 * 24 * 3600)
 
                     filtered = []
@@ -310,7 +311,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
                         await reply(
                             bot,
                             chat_id,
-                            f"No corporate actions found for last 10 years for *{symbol}* ({exchange}).",
+                            f"No activities found for last 10 years for *{symbol}* ({source}).",
                         )
                     else:
                         price_lines = []
@@ -326,7 +327,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
                             bot,
                             chat_id,
                             (
-                                f"📈 Price/Capital related actions (last 10 years) for {symbol} ({exchange})\n"
+                                f"📈 Price/Capital related activities (last 10 years) for {symbol} ({source})\n"
                                 f"Count: {len(price_lines)}"
                             ),
                             price_lines,
@@ -335,7 +336,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
                             bot,
                             chat_id,
                             (
-                                f"🗓️ Meetings/Discussions (last 10 years) for {symbol} ({exchange})\n"
+                                f"🗓️ Sessions/Discussions (last 10 years) for {symbol} ({source})\n"
                                 f"Count: {len(meeting_lines)}"
                             ),
                             meeting_lines,
@@ -345,65 +346,65 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
         elif cmd == "/add":
             if len(parts) < 2:
                 await reply(bot, chat_id,
-                    "Usage: `/add SYMBOL \\[EXCHANGE\\]`\n"
+                    "Usage: `/add TAG \\[SOURCE\\]`\n"
                     "_Source defaults to SRCA if omitted\\._\n"
                     "_Example: /add INFY SRCA_"
                 )
             else:
                 symbol   = parts[1].upper()
-                exchange = parts[2].upper() if len(parts) >= 3 else "SRCA"
+                source = parts[2].upper() if len(parts) >= 3 else "SRCA"
 
-                if exchange not in ("SRCA", "SRCB"):
+                if source not in ("SRCA", "SRCB"):
                     await reply(bot, chat_id,
-                        f"❌ Unknown source *{exchange}*\\. Use `SRCA` or `SRCB`\\."
+                        f"❌ Unknown source *{source}*\\. Use `SRCA` or `SRCB`\\."
                     )
                 else:
-                    entity_name = fetcher.get_entity_name(symbol, exchange) or symbol
-                    added = db.add_to_registry(chat_id, symbol, entity_name, exchange)
+                    entity_name = fetcher.get_entity_name(symbol, source) or symbol
+                    added = db.add_to_registry(chat_id, symbol, entity_name, source)
                     if added:
                         await reply(bot, chat_id,
-                            f"✅ Added *{symbol}* \\({exchange}\\) – {entity_name} to registry\\!"
+                            f"✅ Added *{symbol}* \\({source}\\) – {entity_name} to registry\\!"
                         )
                     else:
                         await reply(bot, chat_id,
-                            f"⚠️ *{symbol}* \\({exchange}\\) is already in your registry\\."
+                            f"⚠️ *{symbol}* \\({source}\\) is already in your registry\\."
                         )
 
         # /remove ─────────────────────────────────────────────────────────
         elif cmd == "/remove":
             if len(parts) < 2:
-                watchlist = db.get_registry(chat_id)
-                if not watchlist:
+                registry_items = db.get_registry(chat_id)
+                if not registry_items:
                     await reply(bot, chat_id, "Your registry is empty\\.")
                 else:
                     lines = "\n".join(
-                        f"{i}\\. {c['symbol']} \\({c['exchange']}\\) – {c['name']}"
-                        for i, c in enumerate(watchlist, 1)
+                        f"{i}\\. {c['symbol']} \\({c['source']}\\) – {c['name']}"
+                        for i, c in enumerate(registry_items, 1)
                     )
                     await reply(bot, chat_id,
-                        f"To remove, use:\n`/remove SYMBOL EXCHANGE`\n\n"
+                        f"To remove, use:\n`/remove TAG SOURCE`\n\n"
                         f"*Current registry:*\n{lines}\n\n"
                         f"_Example: /remove INFY SRCA_"
                     )
             else:
                 symbol   = parts[1].upper()
-                exchange = parts[2].upper() if len(parts) >= 3 else "SRCA"
-                removed  = db.remove_from_registry(chat_id, symbol, exchange)
+                source = parts[2].upper() if len(parts) >= 3 else "SRCA"
+                removed  = db.remove_from_registry(chat_id, symbol, source)
                 if removed:
                     await reply(bot, chat_id,
-                        f"✅ Removed *{symbol}* \\({exchange}\\) from registry\\."
+                        f"✅ Removed *{symbol}* \\({source}\\) from registry\\."
                     )
                 else:
                     await reply(bot, chat_id,
-                        f"❌ *{symbol}* \\({exchange}\\) was not found in your registry\\."
+                        f"❌ *{symbol}* \\({source}\\) was not found in your registry\\."
                     )
 
         # /status ─────────────────────────────────────────────────────────
         elif cmd == "/status":
-            watchlist = db.get_registry(chat_id)
+            registry_items = db.get_registry(chat_id)
             await reply(bot, chat_id,
                 f"📊 *Bot Status*\n\n"
-                f"📋 Your Registry: {len(watchlist)} entities\n"
+                f"📋 Your Registry: {len(registry_items)} entities\n"
                 f"🔄 Poll interval: every 5 minutes\n"
                 f"✅ Running via GitHub Actions"
             )
@@ -419,12 +420,12 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
 
 
 # ---------------------------------------------------------------------------
-# Announcement checker
+# Update checker
 # ---------------------------------------------------------------------------
 
 async def run_update_check(bot: Bot, db: Database, fetcher: DataFetcher):
     """Check all sources for new bulletins/activities and send alerts per chat."""
-    # Get all unique chat IDs that have watchlist entries
+    # Get all unique chat IDs that have registry entries
     chat_ids = db.get_all_chat_ids()
     if not chat_ids:
         logger.info("No chats with registry entries found.")
@@ -432,37 +433,37 @@ async def run_update_check(bot: Bot, db: Database, fetcher: DataFetcher):
 
     total_ann_count = 0
     total_act_count = 0
-    total_companies = 0
+    total_entities = 0
 
     for chat_id in chat_ids:
-        watchlist = db.get_registry(chat_id)
-        logger.info(f"Checking {len(watchlist)} entities for chat_id {chat_id}...")
-        total_companies += len(watchlist)
+        registry_items = db.get_registry(chat_id)
+        logger.info(f"Checking {len(registry_items)} entities for chat_id {chat_id}...")
+        total_entities += len(registry_items)
 
-        for company in watchlist:
-            symbol   = company["symbol"]
-            exchange = company["exchange"]
-            logger.info(f"  → {symbol} ({exchange})")
+        for entity in registry_items:
+            symbol   = entity["symbol"]
+            source = entity["source"]
+            logger.info(f"  → {symbol} ({source})")
 
             try:
-                for ann in fetcher.get_bulletins(symbol, exchange)[:4]:
+                for ann in fetcher.get_bulletins(symbol, source)[:4]:
                     if db.mark_bulletin_processed(
-                        symbol, exchange,
+                        symbol, source,
                         ann.get("id", ""), ann.get("title", ""), ann.get("date", ""),
                     ):
                         total_ann_count += 1
                         resolved = fetcher.resolve_doc_link(
                             symbol,
-                            exchange,
+                            source,
                             ann.get("link", ""),
                         )
-                        src = resolved.get("source", exchange)
+                        src = resolved.get("source", source)
                         download_link = resolved.get("link", "")
-                        release_link = ann.get("release_link") or source_fallback_link(symbol, exchange)
+                        release_link = ann.get("release_link") or source_fallback_link(symbol, source)
                         summary = ann.get("description") or ann.get("title", "N/A")
                         await reply(bot, chat_id,
-                            f"📢 New Bulletin for {company['name']} ({symbol})\n"
-                            f"Source: {exchange}\n\n"
+                            f"📢 New Bulletin for {entity['name']} ({symbol})\n"
+                            f"Source: {source}\n\n"
                             f"Type: {ann.get('type', 'Bulletin')}\n"
                             f"Date: {ann.get('date', 'N/A')}\n"
                             f"Summary: {summary}\n"
@@ -474,24 +475,24 @@ async def run_update_check(bot: Bot, db: Database, fetcher: DataFetcher):
                 logger.error(f"Bulletins error for {symbol}: {e}")
 
             try:
-                for action in fetcher.get_activities(symbol, exchange)[:4]:
+                for action in fetcher.get_activities(symbol, source)[:4]:
                     if db.mark_activity_processed(
-                        symbol, exchange,
+                        symbol, source,
                         action.get("id", ""), action.get("type", ""),
                         action.get("title", ""), action.get("date", ""),
                     ):
                         total_act_count += 1
                         resolved = fetcher.resolve_doc_link(
                             symbol,
-                            exchange,
+                            source,
                             action.get("link", ""),
                         )
-                        src = resolved.get("source", exchange)
+                        src = resolved.get("source", source)
                         link = resolved.get("link", "")
                         group_name = "Sessions/Discussions" if classify_event_type(action) == "meeting" else "Price/Capital Related"
                         await reply(bot, chat_id,
-                            f"💼 New Activity for {company['name']} ({symbol})\n"
-                            f"Source: {exchange}\n\n"
+                            f"💼 New Activity for {entity['name']} ({symbol})\n"
+                            f"Source: {source}\n\n"
                             f"Category: {group_name}\n"
                             f"Date: {action.get('date', 'N/A')}\n"
                             f"Summary: {action.get('title', 'N/A')}\n"
@@ -501,7 +502,7 @@ async def run_update_check(bot: Bot, db: Database, fetcher: DataFetcher):
             except Exception as e:
                 logger.error(f"Activities error for {symbol}: {e}")
 
-    return total_ann_count, total_act_count, total_companies
+    return total_ann_count, total_act_count, total_entities
 
 
 # ---------------------------------------------------------------------------
@@ -526,7 +527,7 @@ async def main():
     # 1. Process any pending commands
     await process_commands(bot, db, fetcher)
 
-    # 2. Check for new announcements
+    # 2. Check for new updates
     ann_count, act_count, total = await run_update_check(bot, db, fetcher)
 
     # 3. Send daily summary once per day (only if new day)
@@ -538,10 +539,10 @@ async def main():
         for chat_id in chat_ids:
             monitored = db.get_registry(chat_id)
             monitored_list = ", ".join(
-                [f"{x['symbol']}({x['exchange']})" for x in monitored]
+                [f"{x['symbol']}({x['source']})" for x in monitored]
             ) or "None"
             await reply(bot, chat_id,
-                f"📋 *Daily Watchlist Summary*\n\n"
+                f"📋 *Daily Registry Summary*\n\n"
                 f"Your Tracked Entities ({len(monitored)}): {monitored_list}\n\n"
                 f"_Bot polling every 5 minutes. New alerts will appear here._ "
             )

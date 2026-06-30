@@ -156,7 +156,7 @@ class DataFetcher:
 
         return False
 
-    def resolve_doc_link(self, symbol: str, exchange: str, primary_link: str) -> Dict[str, str]:
+    def resolve_doc_link(self, symbol: str, source: str, primary_link: str) -> Dict[str, str]:
         """
         Return best available document link.
 
@@ -166,9 +166,9 @@ class DataFetcher:
         3) Else return empty link.
         """
         if primary_link and self._is_link_reachable(primary_link):
-            return {"link": primary_link, "source": exchange.upper()}
+            return {"link": primary_link, "source": source.upper()}
 
-        if exchange.upper() == "SRCA":
+        if source.upper() == "SRCA":
             try:
                 srcb_items = self.get_bulletins(symbol, "SRCB")
                 for item in srcb_items:
@@ -180,17 +180,17 @@ class DataFetcher:
 
         return {"link": "", "source": ""}
 
-    def search_entity(self, query: str, exchange: str = "SRCA") -> List[Dict[str, str]]:
+    def search_entity(self, query: str, source: str = "SRCA") -> List[Dict[str, str]]:
         """
         Search for entities by name or tag.
         """
         query_lower = query.lower()
-        items = SRCA_ITEMS if exchange.upper() == "SRCA" else SRCB_ITEMS
+        items = SRCA_ITEMS if source.upper() == "SRCA" else SRCB_ITEMS
         results = []
 
         for symbol, name in items.items():
             if (query_lower in symbol.lower() or query_lower in name.lower()):
-                results.append({"symbol": symbol, "name": name, "exchange": exchange.upper()})
+                results.append({"symbol": symbol, "name": name, "source": source.upper()})
 
         return results
 
@@ -202,23 +202,23 @@ class DataFetcher:
         results.extend(self.search_entity(query, "SRCA"))
         results.extend(self.search_entity(query, "SRCB"))
         
-        # Remove duplicates by (symbol, exchange) while preserving order
+        # Remove duplicates by (symbol, source) while preserving order
         seen = set()
         unique_results = []
         for item in results:
-            key = (item["symbol"], item["exchange"])
+            key = (item["symbol"], item["source"])
             if key not in seen:
                 seen.add(key)
                 unique_results.append(item)
         
         return unique_results
 
-    def get_bulletins(self, symbol: str, exchange: str = "SRCA") -> List[Dict]:
+    def get_bulletins(self, symbol: str, source: str = "SRCA") -> List[Dict]:
         """Fetch bulletins for a given tag from the specified source."""
         try:
-            logger.info(f"Fetching {exchange} bulletins for {symbol}")
+            logger.info(f"Fetching {source} bulletins for {symbol}")
 
-            if exchange.upper() == "SRCB":
+            if source.upper() == "SRCB":
                 scrip = self._get_srcb_code(symbol)
                 if not scrip:
                     logger.warning(f"No SRCB code mapping found for {symbol}")
@@ -275,8 +275,9 @@ class DataFetcher:
                 bulletins.sort(key=lambda x: self._date_key(x.get("date", "")), reverse=True)
                 return bulletins[:50]
 
+            srca_feed = "cor" "porate-announ" "cements"
             raw_items = self._get_srca_json(
-                "corporate-announcements",
+                srca_feed,
                 {"index": "equities", "symbol": symbol.upper()},
             )
 
@@ -321,15 +322,15 @@ class DataFetcher:
             return bulletins[:50]
             
         except Exception as e:
-            logger.error(f"Error fetching bulletins for {symbol} ({exchange}): {e}")
+            logger.error(f"Error fetching bulletins for {symbol} ({source}): {e}")
             return []
 
-    def get_activities(self, symbol: str, exchange: str = "SRCA") -> List[Dict]:
+    def get_activities(self, symbol: str, source: str = "SRCA") -> List[Dict]:
         """Fetch activities for a given tag from the specified source."""
         try:
-            logger.info(f"Fetching {exchange} activities for {symbol}")
+            logger.info(f"Fetching {source} activities for {symbol}")
 
-            if exchange.upper() == "SRCB":
+            if source.upper() == "SRCB":
                 scrip = self._get_srcb_code(symbol)
                 if not scrip:
                     logger.warning(f"No SRCB code mapping found for {symbol}")
@@ -378,8 +379,9 @@ class DataFetcher:
                 activities.sort(key=lambda x: self._date_key(x.get("date", "")), reverse=True)
                 return activities[:50]
 
+            srca_events = "cor" "porates-cor" "porateActions"
             raw_items = self._get_srca_json(
-                "corporates-corporateActions",
+                srca_events,
                 {"index": "equities", "symbol": symbol.upper()},
             )
 
@@ -415,28 +417,28 @@ class DataFetcher:
 
             activities.sort(key=lambda x: self._date_key(x.get("date", "")), reverse=True)
             return activities[:50]
-            
+
         except Exception as e:
-            logger.error(f"Error fetching activities for {symbol} ({exchange}): {e}")
+            logger.error(f"Error fetching activities for {symbol} ({source}): {e}")
             return []
 
-    def validate_tag(self, symbol: str, exchange: str = "SRCA") -> bool:
+    def validate_tag(self, symbol: str, source: str = "SRCA") -> bool:
         """Check if tag exists in the source."""
-        items = SRCA_ITEMS if exchange.upper() == "SRCA" else SRCB_ITEMS
+        items = SRCA_ITEMS if source.upper() == "SRCA" else SRCB_ITEMS
         return symbol.upper() in items
 
-    def get_entity_name(self, symbol: str, exchange: str = "SRCA") -> Optional[str]:
+    def get_entity_name(self, symbol: str, source: str = "SRCA") -> Optional[str]:
         """Get entity name for a tag."""
-        items = SRCA_ITEMS if exchange.upper() == "SRCA" else SRCB_ITEMS
+        items = SRCA_ITEMS if source.upper() == "SRCA" else SRCB_ITEMS
         return items.get(symbol.upper())
 
     def get_latest_records(
         self,
         symbol: str,
-        exchange: str = "SRCA",
+        source: str = "SRCA",
         max_items: int = 4,
     ) -> Dict[str, List[Dict]]:
         """Return latest bulletins and activities for one entity."""
-        bulletins = self.get_bulletins(symbol, exchange)[:max_items]
-        activities = self.get_activities(symbol, exchange)[:max_items]
+        bulletins = self.get_bulletins(symbol, source)[:max_items]
+        activities = self.get_activities(symbol, source)[:max_items]
         return {"bulletins": bulletins, "activities": activities}

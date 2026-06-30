@@ -31,7 +31,7 @@ db = Database()
 fetcher = DataFetcher()
 
 # Conversation states
-SEARCH_QUERY, CONFIRM_SELECTION, REMOVE_SELECTION, SELECT_EXCHANGE = range(4)
+SEARCH_QUERY, CONFIRM_SELECTION, REMOVE_SELECTION, SELECT_SOURCE = range(4)
 
 # Store user conversations
 user_search_results: Dict[int, List] = {}
@@ -54,16 +54,16 @@ async def send_to_all_chats(context: ContextTypes.DEFAULT_TYPE, text: str, parse
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command handler."""
     welcome_text = """
-🤖 *SRCA Corporate Announcements Monitor*
+🤖 *SRCA Data Bulletins Monitor*
 
-I monitor SRCA corporate announcements and actions for you.
+I monitor SRCA data bulletins and actions for you.
 
 *Available Commands:*
-📌 /add - Add company to registry
-❌ /remove - Remove company from registry
+📌 /add - Add entity to registry
+❌ /remove - Remove entity from registry
 📋 /list - View your registry
-🔍 /search - Search for SRCA companies
-✅ /check - Manually check for new announcements/actions
+🔍 /search - Search for SRCA entities
+✅ /check - Manually check for new bulletins/actions
 📊 /status - View bot status
 
 Use /help for detailed information.
@@ -76,33 +76,33 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = """
 *Commands Help:*
 
-🔍 **/search <company_name>**
-Find SRCA companies by name or symbol
+🔍 **/search <entity_name>**
+Find SRCA entities by name or symbol
 Example: /search Infosys
 
 📌 **/add**
-Add a company to your registry
+Add a entity to your registry
 (You'll select from search results)
 
 📋 **/list**
-View all companies in your registry
+View all entities in your registry
 
 ❌ **/remove**
-Remove a company from registry
+Remove a entity from registry
 
 ✅ **/check**
-Manually check for new announcements and corporate actions
+Manually check for new bulletins and activities
 
 📊 **/status**
 View bot status and last check time
 
-*How to add a company:*
-1. Use /search to find the company
+*How to add a entity:*
+1. Use /search to find the entity
 2. Select from numbered list
 3. Confirm before adding
-4. Company is added to registry
+4. Entity is added to registry
 
-The bot automatically checks every 5 minutes for new announcements.
+The bot automatically checks every 5 minutes for new bulletins.
     """
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
@@ -111,17 +111,17 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Search command handler."""
     if not context.args:
         await update.message.reply_text(
-            "Usage: /search <company_name_or_symbol>\n"
+            "Usage: /search <entity_name_or_symbol>\n"
             "Example: /search Infosys"
         )
         return SEARCH_QUERY
 
     query = " ".join(context.args)
-    results = fetcher.search_all_exchanges(query)
+    results = fetcher.search_all_sources(query)
 
     if not results:
         await update.message.reply_text(
-            f"❌ No companies found matching '{query}'"
+            f"❌ No entities found matching '{query}'"
         )
         return ConversationHandler.END
 
@@ -131,12 +131,12 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_search_query[user_id] = query
 
     # Build message with numbered list
-    response = f"🔍 *Found {len(results)} companies matching '{query}':*\n\n"
-    for idx, company in enumerate(results, 1):
-        in_watchlist = "✓" if db.is_in_watchlist(company["symbol"], company["exchange"]) else " "
-        response += f"{idx}. [{in_watchlist}] {company['symbol']} ({company['exchange']}) - {company['name']}\n"
+    response = f"🔍 *Found {len(results)} entities matching '{query}':*\n\n"
+    for idx, entity in enumerate(results, 1):
+        in_registry = "✓" if db.is_in_registry(entity["symbol"], entity["source"]) else " "
+        response += f"{idx}. [{in_registry}] {entity['symbol']} ({entity['source']}) - {entity['name']}\n"
 
-    response += "\n_Use /add to add one to your watchlist_"
+    response += "\n_Use /add to add one to your registry_"
 
     await update.message.reply_text(response, parse_mode="Markdown")
 
@@ -156,14 +156,14 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Create numbered buttons for selection
     keyboard = []
-    for idx, company in enumerate(results, 1):
-        button_text = f"{idx}. {company['symbol']} - {company['name']}"
+    for idx, entity in enumerate(results, 1):
+        button_text = f"{idx}. {entity['symbol']} - {entity['name']}"
         callback_data = f"add_{idx - 1}"
         keyboard.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
-        "Select company to add to registry:",
+        "Select entity to add to registry:",
         reply_markup=reply_markup
     )
 
@@ -171,7 +171,7 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def confirm_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Confirm adding company to registry."""
+    """Confirm adding entity to registry."""
     query = update.callback_query
     user_id = query.from_user.id
     await query.answer()
@@ -193,9 +193,9 @@ async def confirm_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Confirm before adding
     confirm_message = (
-        f"Please confirm adding this company to your registry:\n\n"
+        f"Please confirm adding this entity to your registry:\n\n"
         f"🏢 *Symbol:* {selected['symbol']}\n"
-        f"🏛️  *Exchange:* {selected['exchange']}\n"
+        f"🏛️  *Source:* {selected['source']}\n"
         f"🏛️  *Name:* {selected['name']}\n\n"
     )
 
@@ -232,16 +232,16 @@ async def process_confirm_add(update: Update, context: ContextTypes.DEFAULT_TYPE
     selected = results[idx]
 
     # Add to registry
-    success = db.add_to_watchlist(selected["symbol"], selected["name"], selected["exchange"])
+    success = db.add_to_registry(selected["symbol"], selected["name"], selected["source"])
 
     if success:
         await query.edit_message_text(
-            f"✅ Added {selected['symbol']} ({selected['exchange']}) to registry!",
+            f"✅ Added {selected['symbol']} ({selected['source']}) to registry!",
             parse_mode="Markdown"
         )
     else:
         await query.edit_message_text(
-            f"⚠️  {selected['symbol']} ({selected['exchange']}) is already in your registry",
+            f"⚠️  {selected['symbol']} ({selected['source']}) is already in your registry",
             parse_mode="Markdown"
         )
 
@@ -262,29 +262,29 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-async def list_watchlist(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def list_registry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """List command handler."""
-    registry = db.get_watchlist()
+    registry = db.get_registry()
 
     if not registry:
         await update.message.reply_text(
             "📋 Your registry is empty.\n"
-            "Use /search and /add to add companies.",
+            "Use /search and /add to add entities.",
             parse_mode="Markdown"
         )
         return
 
     response = "📋 *Your Registry:*\n\n"
-    for idx, company in enumerate(registry, 1):
-        response += f"{idx}. {company['symbol']} ({company['exchange']}) - {company['name']}\n"
+    for idx, entity in enumerate(registry, 1):
+        response += f"{idx}. {entity['symbol']} ({entity['source']}) - {entity['name']}\n"
 
-    response += f"\n_Total: {len(registry)} companies_"
+    response += f"\n_Total: {len(registry)} entities_"
     await update.message.reply_text(response, parse_mode="Markdown")
 
 
 async def remove(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Remove command handler."""
-    registry = db.get_watchlist()
+    registry = db.get_registry()
 
     if not registry:
         await update.message.reply_text(
@@ -295,14 +295,14 @@ async def remove(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Create numbered buttons for selection
     keyboard = []
-    for idx, company in enumerate(registry, 1):
-        button_text = f"{idx}. {company['symbol']} - {company['name']}"
+    for idx, entity in enumerate(registry, 1):
+        button_text = f"{idx}. {entity['symbol']} - {entity['name']}"
         callback_data = f"remove_{idx - 1}"
         keyboard.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
-        "Select company to remove from registry:",
+        "Select entity to remove from registry:",
         reply_markup=reply_markup
     )
 
@@ -314,7 +314,7 @@ async def remove(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def confirm_remove(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Confirm removing company from registry."""
+    """Confirm removing entity from registry."""
     query = update.callback_query
     user_id = query.from_user.id
     await query.answer()
@@ -335,9 +335,9 @@ async def confirm_remove(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Confirm before removing
     confirm_message = (
-        f"Please confirm removing this company:\n\n"
+        f"Please confirm removing this entity:\n\n"
         f"🏢 *Symbol:* {selected['symbol']}\n"
-        f"🏛️  *Exchange:* {selected['exchange']}\n"
+        f"🏛️  *Source:* {selected['source']}\n"
         f"🏛️  *Name:* {selected['name']}\n\n"
     )
 
@@ -374,11 +374,11 @@ async def process_confirm_remove(update: Update, context: ContextTypes.DEFAULT_T
     selected = registry[idx]
 
     # Remove from registry
-    success = fetcher.validate_tag(selected["symbol"], selected["exchange"])
+    success = fetcher.validate_tag(selected["symbol"], selected["source"])
 
     if success:
         await query.edit_message_text(
-            f"✅ Removed {selected['symbol']} ({selected['exchange']}) from registry!",
+            f"✅ Removed {selected['symbol']} ({selected['source']}) from registry!",
             parse_mode="Markdown"
         )
     else:
@@ -397,36 +397,36 @@ async def process_confirm_remove(update: Update, context: ContextTypes.DEFAULT_T
 async def check(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Manual check command."""
     await update.message.reply_text(
-        "⏳ Checking for new announcements and corporate actions...",
+        "⏳ Checking for new bulletins and activities...",
         parse_mode="Markdown"
     )
 
     # Run the check
-    results = await poll_announcements(context)
+    results = await poll_bulletins(context)
 
     if results["total_checked"] == 0:
         await update.message.reply_text(
-            "📭 Your registry is empty. Use /add to add companies.",
+            "📭 Your registry is empty. Use /add to add entities.",
             parse_mode="Markdown"
         )
     else:
         message = (
             f"✅ Check completed!\n\n"
-            f"📊 Companies checked: {results['total_checked']}\n"
-            f"📢 New announcements: {results['announcements']}\n"
-            f"💼 New corporate actions: {results['corporate_actions']}\n"
+            f"📊 Entities checked: {results['total_checked']}\n"
+            f"📢 New bulletins: {results['bulletins']}\n"
+            f"💼 New activities: {results['activity_count']}\n"
         )
         await update.message.reply_text(message, parse_mode="Markdown")
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Status command."""
-    registry = db.get_watchlist()
+    registry = db.get_registry()
     last_check = context.bot_data.get("last_check", "Never")
 
     status_message = (
         f"📊 *Bot Status:*\n\n"
-        f"📋 Companies in registry: {len(registry)}\n"
+        f"📋 Entities in registry: {len(registry)}\n"
         f"⏰ Last check: {last_check}\n"
         f"🔄 Poll interval: {POLL_INTERVAL} seconds (5 minutes)\n"
         f"✅ Bot is {'running' if context.bot_data.get('running', False) else 'idle'}\n"
@@ -434,66 +434,66 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(status_message, parse_mode="Markdown")
 
 
-async def poll_announcements(context: ContextTypes.DEFAULT_TYPE) -> Dict:
-    """Poll announcements and corporate actions."""
+async def poll_bulletins(context: ContextTypes.DEFAULT_TYPE) -> Dict:
+    """Poll bulletins and activities."""
     results = {
         "total_checked": 0,
-        "announcements": 0,
-        "corporate_actions": 0,
+        "bulletins": 0,
+        "activity_count": 0,
     }
 
-    registry = db.get_watchlist()
+    registry = db.get_registry()
     results["total_checked"] = len(registry)
 
     if not registry:
         return results
 
-    logger.info(f"Polling {len(registry)} companies...")
+    logger.info(f"Polling {len(registry)} entities...")
 
-    for company in registry:
-        symbol = company["symbol"]
-        exchange = company["exchange"]
+    for entity in registry:
+        symbol = entity["symbol"]
+        source = entity["source"]
 
-        # Check announcements
-        announcements = fetcher.get_announcements(symbol, exchange)
-        for announcement in announcements:
-            marked = db.mark_announcement_processed(
+        # Check bulletins
+        bulletins = fetcher.get_bulletins(symbol, source)
+        for bulletin in bulletins:
+            marked = db.mark_bulletin_processed(
                 symbol,
-                exchange,
-                announcement.get("id", ""),
-                announcement.get("title", ""),
-                announcement.get("date", "")
+                source,
+                bulletin.get("id", ""),
+                bulletin.get("title", ""),
+                bulletin.get("date", "")
             )
             if marked:
-                results["announcements"] += 1
+                results["bulletins"] += 1
                 # Send notification
                 message = (
-                    f"📢 *New Announcement*\n\n"
-                    f"🏢 Company: {company['name']} ({symbol})\n"
-                    f"🏛️  Exchange: {exchange}\n"
-                    f"📄 Title: {announcement.get('title', 'N/A')}\n"
-                    f"📅 Date: {announcement.get('date', 'N/A')}\n"
+                    f"📢 *New Bulletin*\n\n"
+                    f"🏢 Entity: {entity['name']} ({symbol})\n"
+                    f"🏛️  Source: {source}\n"
+                    f"📄 Title: {bulletin.get('title', 'N/A')}\n"
+                    f"📅 Date: {bulletin.get('date', 'N/A')}\n"
                 )
                 await send_to_all_chats(context, message)
 
-        # Check corporate actions
-        actions = fetcher.get_corporate_actions(symbol, exchange)
+        # Check activities
+        actions = fetcher.get_activities(symbol, source)
         for action in actions:
-            marked = db.mark_corporate_action_processed(
+            marked = db.mark_activity_processed(
                 symbol,
-                exchange,
+                source,
                 action.get("id", ""),
                 action.get("type", ""),
                 action.get("title", ""),
                 action.get("date", "")
             )
             if marked:
-                results["corporate_actions"] += 1
+                results["activity_count"] += 1
                 # Send notification
                 message = (
-                    f"💼 *New Corporate Action*\n\n"
-                    f"🏢 Company: {company['name']} ({symbol})\n"
-                    f"🏛️  Exchange: {exchange}\n"
+                    f"💼 *New Activity*\n\n"
+                    f"🏢 Entity: {entity['name']} ({symbol})\n"
+                    f"🏛️  Source: {source}\n"
                     f"📝 Type: {action.get('type', 'N/A')}\n"
                     f"📄 Title: {action.get('title', 'N/A')}\n"
                     f"📅 Date: {action.get('date', 'N/A')}\n"
@@ -510,7 +510,7 @@ async def poll_task(context: ContextTypes.DEFAULT_TYPE):
     """Background polling task."""
     try:
         logger.info("Running scheduled poll...")
-        await poll_announcements(context)
+        await poll_bulletins(context)
     except Exception as e:
         logger.error(f"Polling error: {e}")
 
@@ -535,7 +535,7 @@ def main():
     # Add command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("list", list_watchlist))
+    application.add_handler(CommandHandler("list", list_registry))
     application.add_handler(CommandHandler("check", check))
     application.add_handler(CommandHandler("status", status))
 

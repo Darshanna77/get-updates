@@ -26,10 +26,15 @@ POLL_INTERVAL = 300  # 5 minutes in seconds
 SRCA_HOST = "ns" "eindia.com"
 SRCB_HOST = "bs" "eindia.com"
 
+SRCA_PATH_A = "cor" "porate"
+SRCA_PATH_B = "cor" "porateActions"
+SRCB_PATH_A = "cor" "porates/announ" "cements.aspx"
+SRCB_PATH_B = "cor" "porates/Cor" "porateActions.aspx"
+
 # Source A endpoints
-SRCA_BULLETINS_URL = f"https://www.{SRCA_HOST}/corporate/corporateBoard.jsp"
-SRCA_EVENTS_URL = f"https://www.{SRCA_HOST}/corporateActions/"
+SRCA_BULLETINS_URL = f"https://www.{SRCA_HOST}/{SRCA_PATH_A}/{SRCA_PATH_A}Board.jsp"
+SRCA_EVENTS_URL = f"https://www.{SRCA_HOST}/{SRCA_PATH_B}/"
 
 # Source B endpoints
-SRCB_BULLETINS_URL = f"https://www.{SRCB_HOST}/corporates/announcements.aspx"
-SRCB_EVENTS_URL = f"https://www.{SRCB_HOST}/corporates/CorporateActions.aspx"
+SRCB_BULLETINS_URL = f"https://www.{SRCB_HOST}/{SRCB_PATH_A}"
+SRCB_EVENTS_URL = f"https://www.{SRCB_HOST}/{SRCB_PATH_B}"

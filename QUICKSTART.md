@@ -37,16 +37,16 @@ git push origin main
 
 ## 5. Test (manual trigger)
 
-- Actions tab → "SRCA Bot - Poll Announcements"
+- Actions tab → "SRCA Bot - Poll Updates"
 - Click "Run workflow"
 - Bot now active and will run every 5 minutes!
 
 ## Use in Telegram
 
 ```
-/search Infosys   # Find company (searches SRCA & SRCB)
+/search Infosys   # Find entity (searches SRCA & SRCB)
 /add              # Add to registry (select - shows SRCA or SRCB)
-/list             # View registry (shows exchange for each)
+/list             # View registry (shows source for each)
 /check            # Manually check now
 ```
 

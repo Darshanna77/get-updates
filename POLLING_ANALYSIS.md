@@ -5,25 +5,25 @@ Your bot polls every **5 minutes** (300 seconds). Let's analyze if this is optim
 
 ---
 
-## 1. SRCA/SRCB Market Hours & Announcement Patterns
+## 1. SRCA/SRCB Cycle Hours & Bulletin Patterns
 
 ### SRCA Trading Hours
 - **Regular Hours**: 09:15 AM - 03:30 PM IST (Monday - Friday)
 - **After Hours**: 03:40 PM - 04:00 PM IST (settlement)
-- **Weekends & Holidays**: Markets closed
+- **Weekends & Holidays**: Cycles closed
 
-### Announcement Release Patterns
+### Bulletin Release Patterns
 - **Regulatory Disclosures**: Released throughout trading hours (any time)
-- **Board Announcements**: Usually released before market open or after close
-- **Corporate Actions**: Typically announced during market hours
-- **Earnings Reports**: Usually released after market close (3:30 PM onwards)
-- **Material Updates**: Can come anytime during market hours
+- **Board Bulletins**: Usually released before cycle open or after close
+- **Activities**: Typically announced during cycle hours
+- **Earnings Reports**: Usually released after cycle close (3:30 PM onwards)
+- **Material Updates**: Can come anytime during cycle hours
 
-### Peak Announcement Times
-1. **9:15 AM - 10:00 AM**: Market open announcements & overnight news
+### Peak Bulletin Times
+1. **9:15 AM - 10:00 AM**: Cycle open bulletins & overnight news
 2. **12:00 PM - 1:00 PM**: Mid-day material updates
-3. **3:00 PM - 3:30 PM**: Pre-close announcements
-4. **3:30 PM onwards**: Post-market announcements (earnings, board decisions)
+3. **3:00 PM - 3:30 PM**: Pre-close bulletins
+4. **3:30 PM onwards**: Post-cycle bulletins (earnings, board decisions)
 
 ---
 
@@ -32,16 +32,16 @@ Your bot polls every **5 minutes** (300 seconds). Let's analyze if this is optim
 ### Option 1: **5 Minutes** (Current)
 **Characteristics:**
 - Very frequent updates
-- Maximum 5-minute delay from announcement to alert
+- Maximum 5-minute delay from bulletin to alert
 - GitHub Actions calls: 12/hour = 288/day = 8,640/month
 
 **Pros:**
 - Near real-time alerts
-- Captures all announcements quickly
+- Captures all bulletins quickly
 - Good for active trading monitoring
 
 **Cons:**
-- Unnecessary polling during market closed hours
+- Unnecessary polling during cycle closed hours
 - Higher GitHub Actions usage
 - Overkill for long-term investors
 - May hit rate limits on SRCA/SRCB servers
@@ -59,29 +59,29 @@ Your bot polls every **5 minutes** (300 seconds). Let's analyze if this is optim
 **Pros:**
 - Good balance between freshness and efficiency
 - Within GitHub free tier (10,000 runs/month easily)
-- Catches announcements same day
+- Catches bulletins same day
 - Reasonable alert latency for most use cases
 - Lower server load on SRCA/SRCB
 
 **Cons:**
-- May miss announcements for <15 min windows
+- May miss bulletins for <15 min windows
 - Not ideal for HFT or scalping
 
-**Best For:** Regular investors, corporate action trackers, dividend trackers
+**Best For:** Regular investors, activity trackers, dividend trackers
 
 ---
 
 ### Option 3: **30 Minutes** (Conservative)
 **Characteristics:**
-- Infrequent polling during market hours
+- Infrequent polling during cycle hours
 - Maximum 30-minute delay
 - GitHub Actions calls: 2/hour = 48/day = 1,440/month
 
 **Pros:**
 - Very efficient resource usage
 - Minimal GitHub Actions consumption
-- Still catches most significant announcements
-- Lighter load on exchanges
+- Still catches most significant bulletins
+- Lighter load on sources
 
 **Cons:**
 - Half-hour delay in alerts
@@ -92,16 +92,16 @@ Your bot polls every **5 minutes** (300 seconds). Let's analyze if this is optim
 ---
 
 ### Option 4: **Hybrid Approach** (Smart Polling)
-**Schedule different intervals based on market status:**
+**Schedule different intervals based on cycle status:**
 
 ```
-During Market Hours (9:15 AM - 3:30 PM IST):
+During Cycle Hours (9:15 AM - 3:30 PM IST):
   - Poll every 5-10 minutes (frequent checking)
 
 During Extended Hours (3:30 PM - 4:00 PM IST):
-  - Poll every 5 minutes (earnings/announcements)
+  - Poll every 5 minutes (earnings/bulletins)
 
-After Market Hours (4:00 PM - 9:15 AM next day):
+After Cycle Hours (4:00 PM - 9:15 AM next day):
   - Poll every 1 hour (overnight news)
 
 Weekends & Holidays:
@@ -109,7 +109,7 @@ Weekends & Holidays:
 ```
 
 **Calculation:**
-- 6.25 hours × 12 polls/hour = 75 polls/day (market hours)
+- 6.25 hours × 12 polls/hour = 75 polls/day (cycle hours)
 - 0.5 hours × 12 polls/hour = 6 polls/day (extended)
 - 16.75 hours × 1 poll/hour = 16.75 polls/day (after hours)
 - Weekends: 24 hours × 0.25 polls/hour = 6 polls/day
@@ -118,12 +118,12 @@ Weekends & Holidays:
 **Pros:**
 - Optimal for all scenarios
 - Real-time during trading hours
-- Minimal alerts when markets closed
+- Minimal alerts when cycles closed
 - ~1/3 resource usage of 5-min interval
 
 **Cons:**
 - Complex workflow configuration
-- Requires market hours aware scheduling
+- Requires cycle hours aware scheduling
 
 ---
 
@@ -132,13 +132,13 @@ Weekends & Holidays:
 **Important**: Both SRCA and SRCB may have their own delays:
 
 ### SRCA Data Delays
-- **Announcements**: Usually updated within 1-2 minutes of posting
-- **Corporate Actions**: Updated immediately after approval
+- **Bulletins**: Usually updated within 1-2 minutes of posting
+- **Activities**: Updated immediately after approval
 - **API Response Time**: 2-5 seconds typical
 
 ### SRCB Data Delays
-- **Announcements**: 1-3 minutes delay
-- **Corporate Actions**: 2-5 minutes delay
+- **Bulletins**: 1-3 minutes delay
+- **Activities**: 2-5 minutes delay
 - **Website Updates**: 3-10 minutes behind real-time
 
 **Key Insight**: Polling too frequently (every 5 sec) won't help because SRCA/SRCB themselves have 1-2 minute delays!
@@ -182,10 +182,10 @@ Weekends & Holidays:
 **Primary Recommendation: 15 Minutes**
 
 **Reasoning:**
-1. **Announcement Timing**: Most significant announcements stay relevant for >15 minutes
+1. **Bulletin Timing**: Most significant bulletins stay relevant for >15 minutes
 2. **Delay Tolerance**: SRCA/SRCB have 1-2 min internal delays anyway
 3. **Efficiency**: 96 checks/day vs 288 with 5-min = 3x more efficient
-4. **User Experience**: Still get same-day alerts for announcements
+4. **User Experience**: Still get same-day alerts for bulletins
 5. **Resource Balance**: Perfect balance for personal use
 
 **Implementation:**
@@ -203,7 +203,7 @@ schedule:
 
 **If you're tracking dividends/bonus only:**
 - Use 30 minutes or 1 hour
-- Reason: Corporate actions don't change minute-to-minute
+- Reason: Activities don't change minute-to-minute
 - Cost: Minimal
 
 **If you want the sweet spot (recommended):**
@@ -214,19 +214,19 @@ schedule:
 
 ## 7. Real-World Impact Analysis
 
-### Example: Dividend Announcement
+### Example: Dividend Bulletin
 ```
-Announcement Posted at: 2:45 PM IST
+Bulletin Posted at: 2:45 PM IST
 SRCA Website Updated: 2:46 PM IST
 Your Bot Checks:
   - 5 min interval: Alerted by 2:50 PM (4 min delay) ✓
   - 15 min interval: Alerted by 2:55 PM (9 min delay) ✓
   - 30 min interval: Alerted by 3:00 PM (14 min delay) ✓
   
-Stock Move: Often takes 5-15 minutes for market reaction
+Asset Move: Often takes 5-15 minutes for cycle reaction
 ```
 
-**Analysis**: All intervals catch the announcement before significant market move!
+**Analysis**: All intervals catch the bulletin before significant cycle move!
 
 ---
 
@@ -250,13 +250,13 @@ Stock Move: Often takes 5-15 minutes for market reaction
 # config.py
 POLL_INTERVAL = 900  # 15 minutes = 900 seconds
 
-# .github/workflows/poll-announcements.yml
+# .github/workflows/poll-bulletins.yml
 schedule:
   - cron: '*/15 * * * *'  # Every 15 minutes
 ```
 
 **Why 15 minutes?**
-1. ✅ Catches all important announcements
+1. ✅ Catches all important bulletins
 2. ✅ SRCA/SRCB data is fresh enough
 3. ✅ Only 2.4% of free tier used
 4. ✅ Still gives alerts within 15 minutes
@@ -274,7 +274,7 @@ schedule:
 POLL_INTERVAL = 900  # Change from 300 to 900
 ```
 
-**File 2: .github/workflows/poll-announcements.yml**
+**File 2: .github/workflows/poll-bulletins.yml**
 ```yaml
 schedule:
   - cron: '*/15 * * * *'  # Change from '*/5 * * * *' to '*/15 * * * *'

@@ -6,7 +6,7 @@
 - Alert delay: ~15 minutes max
 - GitHub usage: 2.4% of free tier
 - Best for: Regular investors, dividend tracking
-- Market coverage: 99% of important announcements
+- Cycle coverage: 99% of important bulletins
 
 ```python
 POLL_INTERVAL = 900  # seconds
@@ -52,7 +52,7 @@ cron: '*/10 * * * *'
 ### 💤 **30 Minutes** (Minimal - For Long-term Investors)
 - Alert delay: ~30 minutes max
 - GitHub usage: 1.2% of free tier
-- Best for: Dividend tracking, bonus announcements
+- Best for: Dividend tracking, bonus bulletins
 - Resource efficient
 
 ```python
@@ -70,7 +70,7 @@ cron: '*/30 * * * *'
 | Fact | Impact |
 |------|--------|
 | SRCA announces → Updated: **1-2 minutes** | Polling <1 min wastes resources |
-| Market reacts: **5-15 minutes** | 15 min alert still useful |
+| Cycle reacts: **5-15 minutes** | 15 min alert still useful |
 | GitHub free tier: **2,000 min/month** | Even 5 min = 7% usage |
 | Typical workflow: **30-60 seconds** | Very efficient |
 | Your data source: **Website data, not API** | 2-5 min delays normal |
@@ -97,15 +97,15 @@ Are you only tracking dividends/bonus?
 
 ## Real Examples
 
-### Announcement Posted at 2:45 PM IST
+### Bulletin Posted at 2:45 PM IST
 
-**Scenario: Dividend Announcement**
+**Scenario: Dividend Bulletin**
 
 | Interval | Alert Time | Decision Impact |
 |----------|-----------|-----------------|
-| 5 min | 2:50 PM | Stock barely moved |
-| 10 min | 2:55 PM | Stock barely moved |
-| **15 min** | **3:00 PM** | **Stock barely moved** ✓ |
+| 5 min | 2:50 PM | Asset barely moved |
+| 10 min | 2:55 PM | Asset barely moved |
+| **15 min** | **3:00 PM** | **Asset barely moved** ✓ |
 | 30 min | 3:15 PM | Might have moved a bit |
 
 **Conclusion**: For dividends, 15 min is perfect!
@@ -147,7 +147,7 @@ All well within limits!
 1. **SRCA/SRCB already have 1-2 minute delays** → Polling faster doesn't help
 2. **Alert gets to you within 15 minutes** → Still fresh/actionable
 3. **3x more efficient than 5 minutes** → Use fewer resources
-4. **Still catches 99% of important announcements** → No practical loss
+4. **Still catches 99% of important bulletins** → No practical loss
 5. **GitHub free tier is barely touched** → Future-proof
 6. **Works for 90%+ of use cases** → Best default
 
@@ -183,7 +183,7 @@ schedule:
 
 ### Step 3: Commit and Push
 ```bash
-git add config.py .github/workflows/poll-announcements.yml
+git add config.py .github/workflows/poll-bulletins.yml
 git commit -m "Change polling interval to 15 minutes"
 git push origin main
 ```
@@ -193,7 +193,7 @@ git push origin main
 ## Testing Your New Interval
 
 1. Go to GitHub → Actions tab
-2. Click "SRCA Bot - Poll Announcements" workflow
+2. Click "SRCA Bot - Poll Updates" workflow
 3. Click "Run workflow"
 4. Check next run is scheduled 15 minutes from last run
 5. Verify in workflow logs
@@ -203,10 +203,10 @@ git push origin main
 ## Questions?
 
 - **Is 15 minutes too long?** No, SRCA has 1-2 min delays anyway
-- **Will I miss announcements?** No, most stay active for hours
+- **Will I miss bulletins?** No, most stay active for hours
 - **Is 5 minutes better?** Only if you're actively trading
 - **Can I use 1 minute?** GitHub doesn't allow <5 min for free
-- **What about market hours only?** That requires complex scheduling
+- **What about cycle hours only?** That requires complex scheduling
 
 ---
 
@@ -215,7 +215,7 @@ git push origin main
 🎯 **Use 15 minutes as default**
 - Best efficiency/effectiveness balance
 - Perfect for investors & traders
-- Catches all material announcements
+- Catches all material bulletins
 - Minimal resource usage
 - Recommended by this analysis
 

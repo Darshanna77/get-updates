@@ -188,7 +188,7 @@ class Database:
             cursor.execute("SELECT symbol, entity_name, source FROM registry WHERE chat_id = ? ORDER BY entity_name", (chat_id,))
             results = cursor.fetchall()
             cursor.close()
-            return [{"symbol": row[0], "name": row[1], "exchange": row[2]} for row in results]
+            return [{"symbol": row[0], "name": row[1], "source": row[2]} for row in results]
 
     def is_in_registry(self, chat_id: int, symbol: str, source: str = "SRCA") -> bool:
         """Check if tag is in registry for a specific chat."""
