@@ -269,8 +269,7 @@ async def process_commands(bot: Bot, db: Database, fetcher: StockFetcher):
                                 f"Summary: {summary}\n"
                                 f"Published Date: {ann.get('published_date', ann.get('date', 'N/A'))}\n"
                                 f"Release Link: {release_link}\n"
-                                f"Download Copy: {(f'({src}) ' + download_link) if download_link else 'Not available'}\n"
-                                f"Exchange Page: {exchange_fallback_link(symbol, exchange)}"
+                                f"Download Copy: {(f'({src}) ' + download_link) if download_link else 'Not available'}"
                             )
                             await reply(bot, chat_id, message, parse_mode=None)
 
