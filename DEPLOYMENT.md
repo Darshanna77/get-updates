@@ -20,7 +20,7 @@ This guide will walk you through setting up the SRCA & SRCB Corporate Announceme
 3. Send message `/newbot`
 4. Follow the prompts:
    - Choose a name (e.g., "SRCA & SRCB Announcements Monitor")
-   - Choose a username (e.g., "nse_bse_bot")
+   - Choose a username (e.g., "pulse_monitor_bot")
 5. BotFather will send you a token like: `123456789:ABCDEFGHIjklmnopQRSTUvwxyz`
 6. **Save this token** - you'll need it
 
@@ -67,15 +67,15 @@ cd pulse-monitor
 
 1. Copy all files from this project into your cloned repository:
    - bot.py
-   - check_announcements.py
+   - run_monitor.py
    - config.py
    - database.py
-   - nse_fetcher.py
+   - data_fetcher.py
    - requirements.txt
    - .env.example
    - .gitignore
    - README.md
-   - .github/workflows/poll-announcements.yml
+   - .github/workflows/poll-updates.yml
 
 2. Create `.env` file (don't commit this):
    ```bash
@@ -193,7 +193,7 @@ Click "New repository secret" for each:
 ### 7.2 Manually Trigger First Run
 
 1. Click "Actions" tab
-2. Click "SRCA Bot - Poll Announcements" workflow (left sidebar)
+2. Click "Pulse Monitor - Poll Updates" workflow (left sidebar)
 3. Click "Run workflow" → "Run workflow" (blue button)
 4. Watch it run (should complete in ~30 seconds)
 5. Check Telegram for confirmation message
@@ -204,9 +204,9 @@ Click "New repository secret" for each:
 
 Your bot is now live and will:
 - ✅ Run automatically every 5 minutes
-- ✅ Monitor your registry for new announcements
+- ✅ Monitor your registry for new bulletins
 - ✅ Send you Telegram alerts
-- ✅ Store processed announcements to avoid duplicates
+- ✅ Store processed records to avoid duplicates
 
 ## To Use the Bot:**
 
@@ -244,9 +244,9 @@ Your bot is now live and will:
 
 1. Check if you're messaging the correct bot
 2. Verify `TELEGRAM_BOT_TOKEN` is correct in GitHub Secrets
-3. Manually trigger workflow: Actions → "SRCA Bot - Poll Announcements" → "Run workflow"
+3. Manually trigger workflow: Actions → "Pulse Monitor - Poll Updates" → "Run workflow"
 
-### No Announcements Received
+### No Updates Received
 
 1. Check your registry: `/list`
 2. Add companies: `/search` then `/add`
@@ -284,20 +284,20 @@ Go to "Actions" tab in GitHub to:
 
 The bot currently has a limited list of SRCA and SRCB companies. To add more:
 
-1. Edit `nse_fetcher.py`
-2. Add SRCA companies to `NSE_SYMBOLS` dictionary:
+1. Edit `data_fetcher.py`
+2. Add SRCA entities to `SRCA_ITEMS` dictionary:
    ```python
-   NSE_SYMBOLS = {
+   SRCA_ITEMS = {
        "INFY": "INFOSYS",
        "TCS": "TATA CONSULTANCY SERVICES",
        # Add more like this:
        "SBIN": "STATE BANK OF INDIA",
    }
    ```
-3. Add SRCB companies to `BSE_SYMBOLS` dictionary:
+3. Add SRCB entities to `SRCB_ITEMS` dictionary:
    ```python
-   BSE_SYMBOLS = {
-       "SENSEX": "SRCB SENSEX 50",
+      SRCB_ITEMS = {
+         "IDX50": "Index Group 50",
        "RELIANCE": "RELIANCE INDUSTRIES",
        # Add more like this:
        "ITC": "ITC LIMITED",

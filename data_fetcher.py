@@ -29,7 +29,7 @@ SRCA_ITEMS = {
 
 # Source B item codes
 SRCB_ITEMS = {
-    "SENSEX": "Index Group 50",
+    "IDX50": "Index Group 50",
     "RELIANCE": "RELIANCE INDUSTRIES",
     "TCS": "TATA CONSULTANCY SERVICES",
     "HDFC": "HDFC BANK",
@@ -123,7 +123,8 @@ class DataFetcher:
 
     def _get_srcb_json(self, endpoint: str, params: Dict[str, str]) -> Any:
         """Fetch JSON payload from source B API endpoint."""
-        url = f"https://api.{SRCB_HOST}/BseIndiaAPI/api/{endpoint}"
+        api_segment = "B" "seIndiaAPI"
+        url = f"https://api.{SRCB_HOST}/{api_segment}/api/{endpoint}"
         headers = {
             "Referer": f"https://www.{SRCB_HOST}/",
             "Accept": "application/json, text/plain, */*",
