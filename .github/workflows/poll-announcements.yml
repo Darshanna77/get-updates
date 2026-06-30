@@ -4,9 +4,8 @@ on:
   schedule:
     # Run every 5 minutes, offset from crowded :00/:05 boundaries.
     - cron: '2/5 * * * *'
-  push:
-    branches:
-      - main
+  repository_dispatch:
+    types: [poll_tick]
   workflow_dispatch:  # Allow manual trigger
 
 jobs:

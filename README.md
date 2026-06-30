@@ -79,6 +79,30 @@ python bot.py
    - Add `TELEGRAM_CHAT_IDS` (comma-separated if multiple chat IDs)
 4. The bot will run automatically via GitHub Actions
 
+### Step 5: Reliable 5-Minute Trigger (Recommended)
+
+GitHub scheduled workflows can be delayed under load. For tighter 5-minute reliability, trigger the workflow externally using `repository_dispatch`.
+
+1. Create a GitHub Personal Access Token (classic or fine-grained) with repository workflow trigger rights.
+    - Fine-grained token (recommended): repository access to this repo, with Actions `Read and write` and Contents `Read`.
+2. Create a secret in your external scheduler named `GH_DISPATCH_TOKEN` with that token.
+3. In a scheduler like cron-job.org, set a job to run every 5 minutes with:
+    - Method: `POST`
+    - URL: `https://api.github.com/repos/<OWNER>/<REPO>/dispatches`
+    - Headers:
+       - `Accept: application/vnd.github+json`
+       - `Authorization: Bearer <GH_DISPATCH_TOKEN>`
+       - `X-GitHub-Api-Version: 2022-11-28`
+    - Body:
+
+```json
+{
+   "event_type": "poll_tick"
+}
+```
+
+This repository is already configured to accept `poll_tick` dispatch events in the workflow.
+
 ## Project Structure
 
 ```
