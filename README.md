@@ -84,7 +84,8 @@ python bot.py
 GitHub scheduled workflows can be delayed under load. For tighter 5-minute reliability, trigger the workflow externally using `repository_dispatch`.
 
 1. Create a GitHub Personal Access Token (classic or fine-grained) with repository workflow trigger rights.
-    - Fine-grained token (recommended): repository access to this repo, with Actions `Read and write` and Contents `Read`.
+   - Fine-grained token (recommended): repository access to this repo, with Contents `Read and write`.
+   - Classic token alternative: scopes `repo` and `workflow`.
 2. Create a secret in your external scheduler named `GH_DISPATCH_TOKEN` with that token.
 3. In a scheduler like cron-job.org, set a job to run every 5 minutes with:
     - Method: `POST`
