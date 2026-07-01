@@ -2,39 +2,39 @@ name: Pulse Monitor - Poll Updates
 
 on:
   schedule:
-    # Run every 5 minutes, offset from crowded :00/:05 boundaries.
-    - cron: '2/5 * * * *'
+    # Run every 10 minutes to reduce Action minutes usage.
+    - cron: '2/10 * * * *'
   repository_dispatch:
     types: [poll_tick]
   workflow_dispatch:  # Allow manual trigger
+
+concurrency:
+  group: pulse-monitor-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
     permissions:
       contents: write
-    runs-on: ubuntu-latest
-    
+    # Use a slimmer Linux runner label as requested.
+    runs-on: ubuntu-slim
+    timeout-minutes: 6
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - name: Ensure database file exists
-        run: |
-          touch pulse.db
-      
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-      
+
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      
+        run: pip install -r requirements.txt
+
       - name: Run update check
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -45,6 +45,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          [ -f pulse.db ] || touch pulse.db
           git add pulse.db
           if ! git diff --cached --quiet; then
             git commit -m "chore: update bot database [skip ci]"
