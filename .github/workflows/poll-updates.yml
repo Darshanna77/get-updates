@@ -2,7 +2,7 @@ name: Pulse Monitor - Poll Updates
 
 on:
   schedule:
-    - cron: "2/10 * * * *"
+    - cron: "*/15 * * * *"
   workflow_dispatch:
   repository_dispatch:
     types: [poll_tick]
