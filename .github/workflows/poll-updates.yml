@@ -2,11 +2,10 @@ name: Pulse Monitor - Poll Updates
 
 on:
   schedule:
-    # Run every 10 minutes to reduce Action minutes usage.
-    - cron: '2/10 * * * *'
+    - cron: "2/10 * * * *"
+  workflow_dispatch:
   repository_dispatch:
     types: [poll_tick]
-  workflow_dispatch:  # Allow manual trigger
 
 concurrency:
   group: pulse-monitor-${{ github.ref }}
@@ -14,42 +13,49 @@ concurrency:
 
 jobs:
   check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
     permissions:
       contents: write
-    # Use a slimmer Linux runner label as requested.
-    runs-on: ubuntu-slim
-    timeout-minutes: 6
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
       - name: Use system Python
         run: |
           python3 --version
-          python3 -m ensurepip --upgrade || true
           python3 -m pip --version
 
       - name: Install dependencies
-        run: python3 -m pip install --disable-pip-version-check --no-input --prefer-binary -r requirements.txt
+        run: |
+          python3 -m pip install \
+            --disable-pip-version-check \
+            --no-input \
+            --no-compile \
+            -r requirements.txt
 
-      - name: Run update check
+      - name: Run monitor
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
         run: python3 run_monitor.py
 
-      - name: Commit database changes
+      - name: Commit database
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+
           [ -f pulse.db ] || touch pulse.db
+
           git add pulse.db
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: update bot database [skip ci]"
-            git push
-          else
-            echo "No database changes to commit"
+
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
           fi
+
+          git commit -m "chore: update bot database [skip ci]"
+          git push
