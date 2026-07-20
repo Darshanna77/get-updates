@@ -24,6 +24,7 @@ from database import Database
 from data_fetcher import SRCB_CODES, DataFetcher, SRCA_HOST, SRCB_HOST
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS
 from telegram import Bot
+from itertools import islice
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -423,9 +424,83 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
 # Update checker
 # ---------------------------------------------------------------------------
 
+async def process_entity_updates(
+    bot: Bot,
+    db: Database,
+    fetcher: DataFetcher,
+    chat_id: int,
+    entity: dict,
+) -> tuple[int, int]:
+    """Process bulletins and activities for a single entity. Returns (new_bulletins, new_activities)."""
+    symbol = entity["symbol"]
+    source = entity["source"]
+    ann_count = 0
+    act_count = 0
+
+    logger.info(f"  → {symbol} ({source})")
+
+    try:
+        for ann in fetcher.get_bulletins(symbol, source)[:4]:
+            if db.mark_bulletin_processed(
+                symbol, source,
+                ann.get("id", ""), ann.get("title", ""), ann.get("date", ""),
+            ):
+                ann_count += 1
+                resolved = fetcher.resolve_doc_link(
+                    symbol,
+                    source,
+                    ann.get("link", ""),
+                )
+                src = resolved.get("source", source)
+                download_link = resolved.get("link", "")
+                release_link = ann.get("release_link") or source_fallback_link(symbol, source)
+                summary = ann.get("description") or ann.get("title", "N/A")
+                await reply(bot, chat_id,
+                    f"📢 New Bulletin for {entity['name']} ({symbol})\n"
+                    f"Source: {source}\n\n"
+                    f"Type: {ann.get('type', 'Bulletin')}\n"
+                    f"Date: {ann.get('date', 'N/A')}\n"
+                    f"Summary: {summary}\n"
+                    f"Published: {ann.get('published_date', ann.get('date', 'N/A'))}\n"
+                    f"Release Link: {release_link}\n"
+                    f"Download Copy: {(f'({src}) ' + download_link) if download_link else 'Not available'}"
+                , parse_mode=None)
+    except Exception as e:
+        logger.error(f"Bulletins error for {symbol}: {e}")
+
+    try:
+        for action in fetcher.get_activities(symbol, source)[:4]:
+            if db.mark_activity_processed(
+                symbol, source,
+                action.get("id", ""), action.get("type", ""),
+                action.get("title", ""), action.get("date", ""),
+            ):
+                act_count += 1
+                resolved = fetcher.resolve_doc_link(
+                    symbol,
+                    source,
+                    action.get("link", ""),
+                )
+                src = resolved.get("source", source)
+                link = resolved.get("link", "")
+                group_name = "Sessions/Discussions" if classify_event_type(action) == "meeting" else "Price/Capital Related"
+                await reply(bot, chat_id,
+                    f"💼 New Activity for {entity['name']} ({symbol})\n"
+                    f"Source: {source}\n\n"
+                    f"Category: {group_name}\n"
+                    f"Date: {action.get('date', 'N/A')}\n"
+                    f"Summary: {action.get('title', 'N/A')}\n"
+                    f"Type: {action.get('type', 'N/A')}\n"
+                    f"Download Copy: {(f'({src}) ' + link) if link else 'Not available'}"
+                , parse_mode=None)
+    except Exception as e:
+        logger.error(f"Activities error for {symbol}: {e}")
+
+    return ann_count, act_count
+
+
 async def run_update_check(bot: Bot, db: Database, fetcher: DataFetcher):
     """Check all sources for new bulletins/activities and send alerts per chat."""
-    # Get all unique chat IDs that have registry entries
     chat_ids = db.get_all_chat_ids()
     if not chat_ids:
         logger.info("No chats with registry entries found.")
@@ -440,67 +515,23 @@ async def run_update_check(bot: Bot, db: Database, fetcher: DataFetcher):
         logger.info(f"Checking {len(registry_items)} entities for chat_id {chat_id}...")
         total_entities += len(registry_items)
 
-        for entity in registry_items:
-            symbol   = entity["symbol"]
-            source = entity["source"]
-            logger.info(f"  → {symbol} ({source})")
+        # Process up to 3 entities concurrently to avoid overloading APIs
+        semaphore = asyncio.Semaphore(3)
 
-            try:
-                for ann in fetcher.get_bulletins(symbol, source)[:4]:
-                    if db.mark_bulletin_processed(
-                        symbol, source,
-                        ann.get("id", ""), ann.get("title", ""), ann.get("date", ""),
-                    ):
-                        total_ann_count += 1
-                        resolved = fetcher.resolve_doc_link(
-                            symbol,
-                            source,
-                            ann.get("link", ""),
-                        )
-                        src = resolved.get("source", source)
-                        download_link = resolved.get("link", "")
-                        release_link = ann.get("release_link") or source_fallback_link(symbol, source)
-                        summary = ann.get("description") or ann.get("title", "N/A")
-                        await reply(bot, chat_id,
-                            f"📢 New Bulletin for {entity['name']} ({symbol})\n"
-                            f"Source: {source}\n\n"
-                            f"Type: {ann.get('type', 'Bulletin')}\n"
-                            f"Date: {ann.get('date', 'N/A')}\n"
-                            f"Summary: {summary}\n"
-                            f"Published: {ann.get('published_date', ann.get('date', 'N/A'))}\n"
-                            f"Release Link: {release_link}\n"
-                            f"Download Copy: {(f'({src}) ' + download_link) if download_link else 'Not available'}"
-                        , parse_mode=None)
-            except Exception as e:
-                logger.error(f"Bulletins error for {symbol}: {e}")
+        async def process_with_semaphore(entity):
+            async with semaphore:
+                return await process_entity_updates(bot, db, fetcher, chat_id, entity)
 
-            try:
-                for action in fetcher.get_activities(symbol, source)[:4]:
-                    if db.mark_activity_processed(
-                        symbol, source,
-                        action.get("id", ""), action.get("type", ""),
-                        action.get("title", ""), action.get("date", ""),
-                    ):
-                        total_act_count += 1
-                        resolved = fetcher.resolve_doc_link(
-                            symbol,
-                            source,
-                            action.get("link", ""),
-                        )
-                        src = resolved.get("source", source)
-                        link = resolved.get("link", "")
-                        group_name = "Sessions/Discussions" if classify_event_type(action) == "meeting" else "Price/Capital Related"
-                        await reply(bot, chat_id,
-                            f"💼 New Activity for {entity['name']} ({symbol})\n"
-                            f"Source: {source}\n\n"
-                            f"Category: {group_name}\n"
-                            f"Date: {action.get('date', 'N/A')}\n"
-                            f"Summary: {action.get('title', 'N/A')}\n"
-                            f"Type: {action.get('type', 'N/A')}\n"
-                            f"Download Copy: {(f'({src}) ' + link) if link else 'Not available'}"
-                        , parse_mode=None)
-            except Exception as e:
-                logger.error(f"Activities error for {symbol}: {e}")
+        tasks = [process_with_semaphore(entity) for entity in registry_items]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error(f"Entity processing failed: {result}")
+            else:
+                ann_count, act_count = result
+                total_ann_count += ann_count
+                total_act_count += act_count
 
     return total_ann_count, total_act_count, total_entities
 
