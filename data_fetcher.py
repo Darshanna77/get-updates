@@ -133,8 +133,9 @@ class DataFetcher:
         logger.info("⚡ Skipping NSE session prep to avoid rate limiting")
         self._srca_session_ready = True
 
-    def _retry_with_backoff(self, func, *args, max_retries=2, timeout_delay=1.0, **kwargs):
-        """Execute function with exponential backoff retry on timeout."""
+    def _retry_with_backoff(self, func, *args, max_retries=3, timeout_delay=3.0, **kwargs):
+        """Execute function with exponential backoff retry on timeout.
+        NSE heavily rate-limits, so use aggressive backoff: 3s -> 6s -> 12s + jitter."""
         last_error = None
         for attempt in range(max_retries):
             try:
@@ -142,8 +143,11 @@ class DataFetcher:
             except requests.exceptions.Timeout as e:
                 last_error = e
                 if attempt < max_retries - 1:
-                    wait_time = timeout_delay * (2 ** attempt)
-                    logger.warning(f"Timeout on attempt {attempt + 1}/{max_retries}, retrying in {wait_time}s: {e}")
+                    # Exponential backoff starting at 3s: 3s, 6s, 12s + random 0-3s jitter
+                    base_wait = timeout_delay * (2 ** attempt)
+                    jitter = random.uniform(0, 3)
+                    wait_time = base_wait + jitter
+                    logger.warning(f"Timeout on attempt {attempt + 1}/{max_retries}, waiting {wait_time:.1f}s: {e}")
                     time.sleep(wait_time)
                 else:
                     logger.error(f"Timeout after {max_retries} attempts: {e}")
@@ -153,12 +157,14 @@ class DataFetcher:
         raise last_error
 
     def _get_srca_json(self, endpoint: str, params: Dict[str, str]) -> List[Dict]:
-        """Fetch JSON list from source A API endpoint with retry logic."""
+        """Fetch JSON list from source A API endpoint with retry logic.
+        NSE is slow; use 40s timeout for reads to avoid premature timeouts."""
         self._prepare_srca_session()
         url = f"https://www.{SRCA_HOST}/api/{endpoint}"
         
         def fetch():
-            resp = self.session.get(url, params=params, timeout=12)
+            # Increased timeout to 40s to account for NSE slowness/rate-limiting
+            resp = self.session.get(url, params=params, timeout=40)
             resp.raise_for_status()
             data = resp.json()
             if isinstance(data, list):
@@ -169,10 +175,11 @@ class DataFetcher:
                 return []
             return []
         
-        return self._retry_with_backoff(fetch, max_retries=2)
+        return self._retry_with_backoff(fetch, max_retries=3, timeout_delay=3.0)
 
     def _get_srcb_json(self, endpoint: str, params: Dict[str, str]) -> Any:
-        """Fetch JSON payload from source B API endpoint with retry logic."""
+        """Fetch JSON payload from source B API endpoint with retry logic.
+        BSE is slower than expected; use 40s timeout to account for slowness."""
         api_segment = "B" "seIndiaAPI"
         url = f"https://api.{SRCB_HOST}/{api_segment}/api/{endpoint}"
         headers = {
@@ -181,11 +188,12 @@ class DataFetcher:
         }
         
         def fetch():
-            resp = self.session.get(url, params=params, headers=headers, timeout=12)
+            # Increased timeout to 40s to handle slow responses
+            resp = self.session.get(url, params=params, headers=headers, timeout=40)
             resp.raise_for_status()
             return resp.json()
         
-        return self._retry_with_backoff(fetch, max_retries=2)
+        return self._retry_with_backoff(fetch, max_retries=3, timeout_delay=3.0)
 
     def _get_srcb_code(self, symbol: str) -> Optional[str]:
         """Resolve source B code from tag."""

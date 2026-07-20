@@ -528,14 +528,20 @@ async def run_update_check(bot: Bot, db: Database, fetcher: DataFetcher):
         logger.info(f"Checking {len(registry_items)} entities for chat_id {chat_id}...")
         total_entities += len(registry_items)
 
-        # Process up to 3 entities concurrently to avoid overloading APIs
-        semaphore = asyncio.Semaphore(3)
+        # Process up to 2 entities concurrently with 3s delay between each to avoid NSE rate-limiting
+        semaphore = asyncio.Semaphore(2)
 
-        async def process_with_semaphore(entity):
+        async def process_with_semaphore(entity, delay: float):
             async with semaphore:
+                # Spread out requests to NSE (3-5s delay between starts)
+                await asyncio.sleep(delay)
                 return await process_entity_updates(bot, db, fetcher, chat_id, entity)
 
-        tasks = [process_with_semaphore(entity) for entity in registry_items]
+        # Create tasks with staggered delays: 0s, 3s, 6s, 9s, ...
+        tasks = [
+            process_with_semaphore(entity, delay=i * 3.0)
+            for i, entity in enumerate(registry_items)
+        ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for result in results:
