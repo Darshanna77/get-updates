@@ -1,6 +1,8 @@
 """Data fetcher for bulletins and activities from external sources."""
 import hashlib
+import json
 import logging
+import os
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -28,6 +30,8 @@ SRCB_CODES = {
 class DataFetcher:
     """Fetch bulletins and activities from data sources."""
 
+    CACHE_FILE = "entity_names_cache.json"
+
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
@@ -38,6 +42,37 @@ class DataFetcher:
             "Connection": "keep-alive",
         })
         self._srca_session_ready = False
+        self._entity_name_cache = self._load_entity_cache()
+
+    def _load_entity_cache(self) -> Dict[str, str]:
+        """Load entity name cache from file."""
+        if os.path.exists(self.CACHE_FILE):
+            try:
+                with open(self.CACHE_FILE, "r") as f:
+                    cache = json.load(f)
+                    logger.info(f"✓ Loaded entity cache with {len(cache)} entries")
+                    return cache
+            except Exception as e:
+                logger.warning(f"Failed to load entity cache: {e}")
+        return {}
+
+    def _save_entity_cache(self):
+        """Save entity name cache to file."""
+        try:
+            with open(self.CACHE_FILE, "w") as f:
+                json.dump(self._entity_name_cache, f, indent=2)
+                logger.info(f"✓ Saved entity cache with {len(self._entity_name_cache)} entries")
+        except Exception as e:
+            logger.error(f"Failed to save entity cache: {e}")
+
+    def _cache_key(self, symbol: str, source: str) -> str:
+        """Generate cache key for symbol+source."""
+        return f"{symbol.upper()}:{source.upper()}"
+
+    def _get_cached_entity_name(self, symbol: str, source: str) -> Optional[str]:
+        """Get entity name from cache if available."""
+        key = self._cache_key(symbol, source)
+        return self._entity_name_cache.get(key)
 
     def _make_id(self, *parts: str) -> str:
         """Create a deterministic ID for de-duplication."""
@@ -489,13 +524,38 @@ class DataFetcher:
         return any(item.get("symbol", "").upper() == sym for item in results)
 
     def get_entity_name(self, symbol: str, source: str = "SRCA") -> Optional[str]:
-        """Get entity name for a tag."""
+        """Get entity name for a tag. Checks cache first, then searches if needed."""
         sym = symbol.upper()
-        results = self.search_entity(sym, source)
+        source_upper = source.upper()
+
+        # 1. Check cache first
+        cached_name = self._get_cached_entity_name(sym, source_upper)
+        if cached_name:
+            logger.info(f"✓ Entity name from cache: {sym} ({source_upper}) → {cached_name}")
+            return cached_name
+
+        # 2. Search if not cached
+        logger.info(f"🔍 Searching for entity name: {sym} ({source_upper})")
+        results = self.search_entity(sym, source_upper)
         for item in results:
             if item.get("symbol", "").upper() == sym:
-                return item.get("name") or sym
-        return sym if (source.upper() == "SRCB" and sym in SRCB_CODES) else None
+                entity_name = item.get("name") or sym
+                # 3. Store in cache
+                key = self._cache_key(sym, source_upper)
+                self._entity_name_cache[key] = entity_name
+                self._save_entity_cache()
+                logger.info(f"✓ Found & cached: {sym} ({source_upper}) → {entity_name}")
+                return entity_name
+
+        # 4. Fallback for SRCB
+        if source_upper == "SRCB" and sym in SRCB_CODES:
+            entity_name = sym
+            key = self._cache_key(sym, source_upper)
+            self._entity_name_cache[key] = entity_name
+            self._save_entity_cache()
+            return entity_name
+
+        return None
 
     def get_latest_records(
         self,
