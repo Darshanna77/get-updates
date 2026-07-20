@@ -165,15 +165,31 @@ class DataFetcher:
         def fetch():
             # Increased timeout to 40s to account for NSE slowness/rate-limiting
             resp = self.session.get(url, params=params, timeout=40)
+            
+            # Check for rate-limiting or error responses
+            if resp.status_code in (429, 403, 502, 503):
+                logger.warning(f"NSE returned {resp.status_code}: {resp.text[:100]}")
+                raise requests.exceptions.Timeout(f"NSE rate-limiting or error: HTTP {resp.status_code}")
+            
             resp.raise_for_status()
-            data = resp.json()
-            if isinstance(data, list):
-                return data
-            if isinstance(data, dict):
-                if isinstance(data.get("data"), list):
-                    return data["data"]
+            
+            # Check for empty response
+            if not resp.text or not resp.text.strip():
+                logger.warning("Empty response from NSE API")
                 return []
-            return []
+            
+            try:
+                data = resp.json()
+                if isinstance(data, list):
+                    return data
+                if isinstance(data, dict):
+                    if isinstance(data.get("data"), list):
+                        return data["data"]
+                    return []
+                return []
+            except ValueError as e:
+                logger.warning(f"Failed to parse JSON response: {e}, body: {resp.text[:200]}")
+                return []
         
         return self._retry_with_backoff(fetch, max_retries=3, timeout_delay=3.0)
 
@@ -190,8 +206,24 @@ class DataFetcher:
         def fetch():
             # Increased timeout to 40s to handle slow responses
             resp = self.session.get(url, params=params, headers=headers, timeout=40)
+            
+            # Check for rate-limiting or error responses
+            if resp.status_code in (429, 403, 502, 503):
+                logger.warning(f"BSE returned {resp.status_code}: {resp.text[:100]}")
+                raise requests.exceptions.Timeout(f"BSE rate-limiting or error: HTTP {resp.status_code}")
+            
             resp.raise_for_status()
-            return resp.json()
+            
+            # Check for empty response
+            if not resp.text or not resp.text.strip():
+                logger.warning("Empty response from BSE API")
+                return {}
+            
+            try:
+                return resp.json()
+            except ValueError as e:
+                logger.warning(f"Failed to parse JSON response from BSE: {e}, body: {resp.text[:200]}")
+                return {}
         
         return self._retry_with_backoff(fetch, max_retries=3, timeout_delay=3.0)
 
@@ -249,11 +281,27 @@ class DataFetcher:
         
         def fetch():
             resp = self.session.get(url, params={"q": query}, timeout=10)
+            
+            # Check for rate-limiting or error responses
+            if resp.status_code in (429, 403, 502, 503):
+                logger.warning(f\"NSE search returned {resp.status_code}, treating as rate-limit\")
+                raise requests.exceptions.Timeout(f\"NSE rate-limiting: HTTP {resp.status_code}\")
+            
             resp.raise_for_status()
-            return resp.json()
+            
+            # Check for empty response
+            if not resp.text or not resp.text.strip():
+                logger.warning(\"Empty response from NSE search API\")
+                return {}
+            
+            try:
+                return resp.json()
+            except ValueError as e:
+                logger.warning(f\"Failed to parse search response: {e}, body: {resp.text[:200]}\")
+                return {}
         
         try:
-            payload = self._retry_with_backoff(fetch, max_retries=2)
+            payload = self._retry_with_backoff(fetch, max_retries=2, timeout_delay=3.0)
         except Exception as e:
             logger.error(f"Search failed for query '{query}': {e}")
             return []
