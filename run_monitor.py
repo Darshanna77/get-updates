@@ -439,6 +439,9 @@ async def process_entity_updates(
     ann_count = 0
     act_count = 0
 
+    # Rotate user agent to avoid NSE detection
+    fetcher._update_headers()
+
     logger.info(f"  → {symbol} ({source})")
 
     try:
@@ -567,6 +570,9 @@ async def main():
 
     # Cleanup: Remove records older than 30 days (prevents DB bloat)
     db.clear_old_processed_records(days=30)
+
+    # Clear cookies before fetching to avoid NSE rate limiting
+    fetcher.clear_cookies()
 
     # 1. Process any pending commands
     await process_commands(bot, db, fetcher)

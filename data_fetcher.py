@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 import os
+import random
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -32,17 +33,35 @@ class DataFetcher:
 
     CACHE_FILE = "entity_names_cache.json"
 
+    # Rotate user agents to avoid NSE bot detection
+    USER_AGENTS = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+    ]
+
     def __init__(self):
         self.session = requests.Session()
-        self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Referer": f"https://www.{SRCA_HOST}/",
-            "Connection": "keep-alive",
-        })
+        self._update_headers()
+        # Disable cookies to avoid NSE rate limiting
+        self.session.cookies.clear()
         self._srca_session_ready = False
         self._entity_name_cache = self._load_entity_cache()
+
+    def _update_headers(self):
+        """Update session headers with random user agent."""
+        user_agent = random.choice(self.USER_AGENTS)
+        self.session.headers.update({
+            "User-Agent": user_agent,
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Referer": f"https://www.{SRCA_HOST}/",
+            "Connection": "keep-alive",
+            "DNT": "1",
+        })
 
     def _load_entity_cache(self) -> Dict[str, str]:
         """Load entity name cache from file."""
@@ -55,6 +74,11 @@ class DataFetcher:
             except Exception as e:
                 logger.warning(f"Failed to load entity cache: {e}")
         return {}
+
+    def clear_cookies(self):
+        """Clear accumulated cookies to prevent NSE rate limiting."""
+        self.session.cookies.clear()
+        logger.debug("✓ Cleared accumulated cookies")
 
     def _save_entity_cache(self):
         """Save entity name cache to file."""
@@ -101,13 +125,12 @@ class DataFetcher:
         return datetime.min
 
     def _prepare_srca_session(self):
-        """Prime source A cookies once before API calls."""
+        """Session prep is skipped to avoid NSE rate limiting via cookies.
+        Direct API calls without homepage hits are faster and don't trigger WAF."""
         if self._srca_session_ready:
             return
-        try:
-            self.session.get(f"https://www.{SRCA_HOST}", timeout=8)
-        except Exception as e:
-            logger.warning(f"SRCA session priming failed (non-fatal): {e}")
+        # Skip homepage request - NSE rate-limits based on session/cookies
+        logger.info("⚡ Skipping NSE session prep to avoid rate limiting")
         self._srca_session_ready = True
 
     def _retry_with_backoff(self, func, *args, max_retries=2, timeout_delay=1.0, **kwargs):
