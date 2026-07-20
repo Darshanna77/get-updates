@@ -284,20 +284,20 @@ class DataFetcher:
             
             # Check for rate-limiting or error responses
             if resp.status_code in (429, 403, 502, 503):
-                logger.warning(f\"NSE search returned {resp.status_code}, treating as rate-limit\")
-                raise requests.exceptions.Timeout(f\"NSE rate-limiting: HTTP {resp.status_code}\")
+                logger.warning(f"NSE search returned {resp.status_code}, treating as rate-limit")
+                raise requests.exceptions.Timeout(f"NSE rate-limiting: HTTP {resp.status_code}")
             
             resp.raise_for_status()
             
             # Check for empty response
             if not resp.text or not resp.text.strip():
-                logger.warning(\"Empty response from NSE search API\")
+                logger.warning("Empty response from NSE search API")
                 return {}
             
             try:
                 return resp.json()
             except ValueError as e:
-                logger.warning(f\"Failed to parse search response: {e}, body: {resp.text[:200]}\")
+                logger.warning(f"Failed to parse search response: {e}, body: {resp.text[:200]}")
                 return {}
         
         try:

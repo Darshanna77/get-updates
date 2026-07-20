@@ -190,17 +190,17 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
             registry_items = db.get_registry(chat_id)
             if not registry_items:
                 await reply(bot, chat_id,
-                    "📋 Your registry is empty\.\n"
-                    "Use `/add TAG SOURCE` to add an entity\.\n"
+                    "📋 Your registry is empty.\n"
+                    "Use `/add TAG SOURCE` to add an entity.\n"
                     "_Example: /add NOCIL SRCA_"
                 )
             else:
                 lines = "\n".join(
-                    f"{i}\\. {c['symbol']} \\({c['source']}\\) – {c['name']}"
+                    f"{i}. {c['symbol']} ({c['source']}) – {c['name']}"
                     for i, c in enumerate(registry_items, 1)
                 )
                 await reply(bot, chat_id,
-                    f"📋 *Your Registry \\({len(registry_items)} entities\\):*\n\n{lines}"
+                    f"📋 *Your Registry ({len(registry_items)} entities):*\n\n{lines}"
                 )
 
         # /search ─────────────────────────────────────────────────────────
@@ -221,13 +221,13 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
                     for r in results:
                         tick = "✓ " if db.is_in_registry(chat_id, r["symbol"], r["source"]) else ""
                         lines.append(
-                            f"{tick}`{r['symbol']}` \\({r['source']}\\) – {r['name']}"
+                            f"{tick}`{r['symbol']}` ({r['source']}) – {r['name']}"
                         )
                     await reply(bot, chat_id,
                         f"🔍 *Results for '{query}':*\n\n"
                         + "\n".join(lines)
                         + "\n\n_To add: /add TAG SOURCE_\n"
-                          "_e\.g\. /add NOCIL SRCA_"
+                          "_e.g. /add NOCIL SRCA_"
                     )
 
         # /latestBul ──────────────────────────────────────────────────────
@@ -365,11 +365,11 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
                     added = db.add_to_registry(chat_id, symbol, entity_name, source)
                     if added:
                         await reply(bot, chat_id,
-                            f"✅ Added *{symbol}* \\({source}\\) – {entity_name} to registry\\!"
+                            f"✅ Added *{symbol}* ({source}) – {entity_name} to registry!"
                         )
                     else:
                         await reply(bot, chat_id,
-                            f"⚠️ *{symbol}* \\({source}\\) is already in your registry\\."
+                            f"⚠️ *{symbol}* ({source}) is already in your registry."
                         )
 
         # /remove ─────────────────────────────────────────────────────────
@@ -377,10 +377,10 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
             if len(parts) < 2:
                 registry_items = db.get_registry(chat_id)
                 if not registry_items:
-                    await reply(bot, chat_id, "Your registry is empty\\.")
+                    await reply(bot, chat_id, "Your registry is empty.")
                 else:
                     lines = "\n".join(
-                        f"{i}\\. {c['symbol']} \\({c['source']}\\) – {c['name']}"
+                        f"{i}. {c['symbol']} ({c['source']}) – {c['name']}"
                         for i, c in enumerate(registry_items, 1)
                     )
                     await reply(bot, chat_id,
@@ -394,11 +394,11 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
                 removed  = db.remove_from_registry(chat_id, symbol, source)
                 if removed:
                     await reply(bot, chat_id,
-                        f"✅ Removed *{symbol}* \\({source}\\) from registry\\."
+                        f"✅ Removed *{symbol}* ({source}) from registry."
                     )
                 else:
                     await reply(bot, chat_id,
-                        f"❌ *{symbol}* \\({source}\\) was not found in your registry\\."
+                        f"❌ *{symbol}* ({source}) was not found in your registry."
                     )
 
         # /status ─────────────────────────────────────────────────────────
