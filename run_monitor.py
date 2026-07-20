@@ -18,6 +18,7 @@ Commands (send these to your bot on Telegram):
 """
 import asyncio
 import logging
+import random
 from datetime import datetime
 from typing import Optional
 from database import Database
@@ -525,6 +526,8 @@ async def run_update_check(bot: Bot, db: Database, fetcher: DataFetcher):
 
     for chat_id in chat_ids:
         registry_items = db.get_registry(chat_id)
+        # Randomize entity query order to avoid predictable bot patterns
+        random.shuffle(registry_items)
         logger.info(f"Checking {len(registry_items)} entities for chat_id {chat_id}...")
         total_entities += len(registry_items)
 
