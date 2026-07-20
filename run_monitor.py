@@ -565,6 +565,9 @@ async def main():
 
     logger.info(f"✓ Chat IDs: {TELEGRAM_CHAT_IDS}")
 
+    # Cleanup: Remove records older than 30 days (prevents DB bloat)
+    db.clear_old_processed_records(days=30)
+
     # 1. Process any pending commands
     await process_commands(bot, db, fetcher)
 
