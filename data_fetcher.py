@@ -57,7 +57,6 @@ class DataFetcher:
             "User-Agent": user_agent,
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
             "Referer": f"https://www.{SRCA_HOST}/",
             "Connection": "keep-alive",
             "DNT": "1",
@@ -168,13 +167,13 @@ class DataFetcher:
             
             # Check for rate-limiting or error responses
             if resp.status_code in (429, 403, 502, 503):
-                logger.warning(f"NSE returned {resp.status_code}: {resp.text[:100]}")
+                logger.warning(f"NSE returned {resp.status_code}")
                 raise requests.exceptions.Timeout(f"NSE rate-limiting or error: HTTP {resp.status_code}")
             
             resp.raise_for_status()
             
             # Check for empty response
-            if not resp.text or not resp.text.strip():
+            if not resp.content or len(resp.content) == 0:
                 logger.warning("Empty response from NSE API")
                 return []
             
@@ -188,7 +187,7 @@ class DataFetcher:
                     return []
                 return []
             except ValueError as e:
-                logger.warning(f"Failed to parse JSON response: {e}, body: {resp.text[:200]}")
+                logger.warning(f"Failed to parse JSON: {e}")
                 return []
         
         return self._retry_with_backoff(fetch, max_retries=3, timeout_delay=3.0)
@@ -209,20 +208,20 @@ class DataFetcher:
             
             # Check for rate-limiting or error responses
             if resp.status_code in (429, 403, 502, 503):
-                logger.warning(f"BSE returned {resp.status_code}: {resp.text[:100]}")
+                logger.warning(f"BSE returned {resp.status_code}")
                 raise requests.exceptions.Timeout(f"BSE rate-limiting or error: HTTP {resp.status_code}")
             
             resp.raise_for_status()
             
             # Check for empty response
-            if not resp.text or not resp.text.strip():
+            if not resp.content or len(resp.content) == 0:
                 logger.warning("Empty response from BSE API")
                 return {}
             
             try:
                 return resp.json()
             except ValueError as e:
-                logger.warning(f"Failed to parse JSON response from BSE: {e}, body: {resp.text[:200]}")
+                logger.warning(f"Failed to parse JSON from BSE: {e}")
                 return {}
         
         return self._retry_with_backoff(fetch, max_retries=3, timeout_delay=3.0)
@@ -284,20 +283,20 @@ class DataFetcher:
             
             # Check for rate-limiting or error responses
             if resp.status_code in (429, 403, 502, 503):
-                logger.warning(f"NSE search returned {resp.status_code}, treating as rate-limit")
+                logger.warning(f"NSE search returned {resp.status_code}")
                 raise requests.exceptions.Timeout(f"NSE rate-limiting: HTTP {resp.status_code}")
             
             resp.raise_for_status()
             
             # Check for empty response
-            if not resp.text or not resp.text.strip():
+            if not resp.content or len(resp.content) == 0:
                 logger.warning("Empty response from NSE search API")
                 return {}
             
             try:
                 return resp.json()
             except ValueError as e:
-                logger.warning(f"Failed to parse search response: {e}, body: {resp.text[:200]}")
+                logger.warning(f"Failed to parse search response: {e}")
                 return {}
         
         try:
