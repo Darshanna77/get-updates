@@ -403,9 +403,11 @@ async def process_commands(bot: Bot, db: Database, fetcher: DataFetcher):
         # /status ─────────────────────────────────────────────────────────
         elif cmd == "/status":
             registry_items = db.get_registry(chat_id)
+            cache_size = len(fetcher._entity_name_cache)
             await reply(bot, chat_id,
                 f"📊 *Bot Status*\n\n"
                 f"📋 Your Registry: {len(registry_items)} entities\n"
+                f"💾 Cached Names: {cache_size} entities\n"
                 f"🔄 Poll interval: every 5 minutes\n"
                 f"✅ Running via GitHub Actions"
             )
