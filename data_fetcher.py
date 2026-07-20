@@ -69,14 +69,17 @@ class DataFetcher:
         """Prime source A cookies once before API calls."""
         if self._srca_session_ready:
             return
-        self.session.get(f"https://www.{SRCA_HOST}", timeout=20)
+        try:
+            self.session.get(f"https://www.{SRCA_HOST}", timeout=8)
+        except Exception as e:
+            logger.warning(f"SRCA session priming failed (non-fatal): {e}")
         self._srca_session_ready = True
 
     def _get_srca_json(self, endpoint: str, params: Dict[str, str]) -> List[Dict]:
         """Fetch JSON list from source A API endpoint."""
         self._prepare_srca_session()
         url = f"https://www.{SRCA_HOST}/api/{endpoint}"
-        resp = self.session.get(url, params=params, timeout=25)
+        resp = self.session.get(url, params=params, timeout=12)
         resp.raise_for_status()
         data = resp.json()
         if isinstance(data, list):
@@ -95,7 +98,7 @@ class DataFetcher:
             "Referer": f"https://www.{SRCB_HOST}/",
             "Accept": "application/json, text/plain, */*",
         }
-        resp = self.session.get(url, params=params, headers=headers, timeout=25)
+        resp = self.session.get(url, params=params, headers=headers, timeout=12)
         resp.raise_for_status()
         return resp.json()
 
@@ -111,14 +114,14 @@ class DataFetcher:
         for attempt in range(retries):
             try:
                 # Some hosts reject HEAD, so try GET stream first.
-                resp = self.session.get(url, timeout=12, allow_redirects=True, stream=True)
+                resp = self.session.get(url, timeout=8, allow_redirects=True, stream=True)
                 if 200 <= resp.status_code < 300:
                     return True
             except Exception:
                 pass
 
             # Small backoff for transient CDN/network errors.
-            time.sleep(0.8 * (attempt + 1))
+            time.sleep(0.5 * (attempt + 1))
 
         return False
 
@@ -150,7 +153,7 @@ class DataFetcher:
         """Search source A symbols dynamically using its search API."""
         self._prepare_srca_session()
         url = f"https://www.{SRCA_HOST}/api/search/autocomplete"
-        resp = self.session.get(url, params={"q": query}, timeout=20)
+        resp = self.session.get(url, params={"q": query}, timeout=10)
         resp.raise_for_status()
         payload = resp.json()
 
