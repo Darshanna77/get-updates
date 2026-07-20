@@ -110,32 +110,59 @@ class DataFetcher:
             logger.warning(f"SRCA session priming failed (non-fatal): {e}")
         self._srca_session_ready = True
 
+    def _retry_with_backoff(self, func, *args, max_retries=2, timeout_delay=1.0, **kwargs):
+        """Execute function with exponential backoff retry on timeout."""
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                return func(*args, **kwargs)
+            except requests.exceptions.Timeout as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    wait_time = timeout_delay * (2 ** attempt)
+                    logger.warning(f"Timeout on attempt {attempt + 1}/{max_retries}, retrying in {wait_time}s: {e}")
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"Timeout after {max_retries} attempts: {e}")
+            except Exception as e:
+                # Non-timeout errors: fail immediately
+                raise
+        raise last_error
+
     def _get_srca_json(self, endpoint: str, params: Dict[str, str]) -> List[Dict]:
-        """Fetch JSON list from source A API endpoint."""
+        """Fetch JSON list from source A API endpoint with retry logic."""
         self._prepare_srca_session()
         url = f"https://www.{SRCA_HOST}/api/{endpoint}"
-        resp = self.session.get(url, params=params, timeout=12)
-        resp.raise_for_status()
-        data = resp.json()
-        if isinstance(data, list):
-            return data
-        if isinstance(data, dict):
-            if isinstance(data.get("data"), list):
-                return data["data"]
+        
+        def fetch():
+            resp = self.session.get(url, params=params, timeout=12)
+            resp.raise_for_status()
+            data = resp.json()
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict):
+                if isinstance(data.get("data"), list):
+                    return data["data"]
+                return []
             return []
-        return []
+        
+        return self._retry_with_backoff(fetch, max_retries=2)
 
     def _get_srcb_json(self, endpoint: str, params: Dict[str, str]) -> Any:
-        """Fetch JSON payload from source B API endpoint."""
+        """Fetch JSON payload from source B API endpoint with retry logic."""
         api_segment = "B" "seIndiaAPI"
         url = f"https://api.{SRCB_HOST}/{api_segment}/api/{endpoint}"
         headers = {
             "Referer": f"https://www.{SRCB_HOST}/",
             "Accept": "application/json, text/plain, */*",
         }
-        resp = self.session.get(url, params=params, headers=headers, timeout=12)
-        resp.raise_for_status()
-        return resp.json()
+        
+        def fetch():
+            resp = self.session.get(url, params=params, headers=headers, timeout=12)
+            resp.raise_for_status()
+            return resp.json()
+        
+        return self._retry_with_backoff(fetch, max_retries=2)
 
     def _get_srcb_code(self, symbol: str) -> Optional[str]:
         """Resolve source B code from tag."""
@@ -185,12 +212,20 @@ class DataFetcher:
         return {"link": "", "source": ""}
 
     def _search_srca_dynamic(self, query: str) -> List[Dict[str, str]]:
-        """Search source A symbols dynamically using its search API."""
+        """Search source A symbols dynamically using its search API with retry."""
         self._prepare_srca_session()
         url = f"https://www.{SRCA_HOST}/api/search/autocomplete"
-        resp = self.session.get(url, params={"q": query}, timeout=10)
-        resp.raise_for_status()
-        payload = resp.json()
+        
+        def fetch():
+            resp = self.session.get(url, params={"q": query}, timeout=10)
+            resp.raise_for_status()
+            return resp.json()
+        
+        try:
+            payload = self._retry_with_backoff(fetch, max_retries=2)
+        except Exception as e:
+            logger.error(f"Search failed for query '{query}': {e}")
+            return []
 
         rows = []
         if isinstance(payload, dict):

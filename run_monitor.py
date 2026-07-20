@@ -442,61 +442,69 @@ async def process_entity_updates(
     logger.info(f"  → {symbol} ({source})")
 
     try:
-        for ann in fetcher.get_bulletins(symbol, source)[:4]:
+        bulletins = fetcher.get_bulletins(symbol, source)[:4]
+        for ann in bulletins:
             if db.mark_bulletin_processed(
                 symbol, source,
                 ann.get("id", ""), ann.get("title", ""), ann.get("date", ""),
             ):
                 ann_count += 1
-                resolved = fetcher.resolve_doc_link(
-                    symbol,
-                    source,
-                    ann.get("link", ""),
-                )
-                src = resolved.get("source", source)
-                download_link = resolved.get("link", "")
-                release_link = ann.get("release_link") or source_fallback_link(symbol, source)
-                summary = ann.get("description") or ann.get("title", "N/A")
-                await reply(bot, chat_id,
-                    f"📢 New Bulletin for {entity['name']} ({symbol})\n"
-                    f"Source: {source}\n\n"
-                    f"Type: {ann.get('type', 'Bulletin')}\n"
-                    f"Date: {ann.get('date', 'N/A')}\n"
-                    f"Summary: {summary}\n"
-                    f"Published: {ann.get('published_date', ann.get('date', 'N/A'))}\n"
-                    f"Release Link: {release_link}\n"
-                    f"Download Copy: {(f'({src}) ' + download_link) if download_link else 'Not available'}"
-                , parse_mode=None)
+                try:
+                    resolved = fetcher.resolve_doc_link(
+                        symbol,
+                        source,
+                        ann.get("link", ""),
+                    )
+                    src = resolved.get("source", source)
+                    download_link = resolved.get("link", "")
+                    release_link = ann.get("release_link") or source_fallback_link(symbol, source)
+                    summary = ann.get("description") or ann.get("title", "N/A")
+                    await reply(bot, chat_id,
+                        f"📢 New Bulletin for {entity['name']} ({symbol})\n"
+                        f"Source: {source}\n\n"
+                        f"Type: {ann.get('type', 'Bulletin')}\n"
+                        f"Date: {ann.get('date', 'N/A')}\n"
+                        f"Summary: {summary}\n"
+                        f"Published: {ann.get('published_date', ann.get('date', 'N/A'))}\n"
+                        f"Release Link: {release_link}\n"
+                        f"Download Copy: {(f'({src}) ' + download_link) if download_link else 'Not available'}"
+                    , parse_mode=None)
+                except Exception as e:
+                    logger.error(f"Failed to send bulletin alert for {symbol}: {e}")
     except Exception as e:
-        logger.error(f"Bulletins error for {symbol}: {e}")
+        logger.warning(f"Skipping bulletins for {symbol} ({source}): {e}")
 
     try:
-        for action in fetcher.get_activities(symbol, source)[:4]:
+        activities = fetcher.get_activities(symbol, source)[:4]
+        for action in activities:
             if db.mark_activity_processed(
                 symbol, source,
                 action.get("id", ""), action.get("type", ""),
                 action.get("title", ""), action.get("date", ""),
             ):
                 act_count += 1
-                resolved = fetcher.resolve_doc_link(
-                    symbol,
-                    source,
-                    action.get("link", ""),
-                )
-                src = resolved.get("source", source)
-                link = resolved.get("link", "")
-                group_name = "Sessions/Discussions" if classify_event_type(action) == "meeting" else "Price/Capital Related"
-                await reply(bot, chat_id,
-                    f"💼 New Activity for {entity['name']} ({symbol})\n"
-                    f"Source: {source}\n\n"
-                    f"Category: {group_name}\n"
-                    f"Date: {action.get('date', 'N/A')}\n"
-                    f"Summary: {action.get('title', 'N/A')}\n"
-                    f"Type: {action.get('type', 'N/A')}\n"
-                    f"Download Copy: {(f'({src}) ' + link) if link else 'Not available'}"
-                , parse_mode=None)
+                try:
+                    resolved = fetcher.resolve_doc_link(
+                        symbol,
+                        source,
+                        action.get("link", ""),
+                    )
+                    src = resolved.get("source", source)
+                    link = resolved.get("link", "")
+                    group_name = "Sessions/Discussions" if classify_event_type(action) == "meeting" else "Price/Capital Related"
+                    await reply(bot, chat_id,
+                        f"💼 New Activity for {entity['name']} ({symbol})\n"
+                        f"Source: {source}\n\n"
+                        f"Category: {group_name}\n"
+                        f"Date: {action.get('date', 'N/A')}\n"
+                        f"Summary: {action.get('title', 'N/A')}\n"
+                        f"Type: {action.get('type', 'N/A')}\n"
+                        f"Download Copy: {(f'({src}) ' + link) if link else 'Not available'}"
+                    , parse_mode=None)
+                except Exception as e:
+                    logger.error(f"Failed to send activity alert for {symbol}: {e}")
     except Exception as e:
-        logger.error(f"Activities error for {symbol}: {e}")
+        logger.warning(f"Skipping activities for {symbol} ({source}): {e}")
 
     return ann_count, act_count
 
